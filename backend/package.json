@@ -1,0 +1,35 @@
+{
+  "name": "elva-support-backend",
+  "version": "1.0.0",
+  "description": "ELVA Support System API",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node scripts/ensure-port-free.js 3000 && nodemon src/server.js",
+    "seed": "node src/scripts/seed.js",
+    "test": "jest --runInBand --forceExit",
+    "test:ci": "jest --runInBand --forceExit --coverage"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.5.0",
+    "express-validator": "^7.2.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.8.0",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1"
+  },
+  "optionalDependencies": {
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "mongodb-memory-server": "^10.1.4",
+    "nodemon": "^3.1.4",
+    "supertest": "^7.0.0"
+  }
+}

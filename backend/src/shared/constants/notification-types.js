@@ -1,0 +1,33 @@
+const NOTIFICATION_PROVIDERS = {
+  ELVA_NOTIFY: "ELVA_NOTIFY",
+  FALLBACK: "FALLBACK"
+};
+
+const DELIVERY_STATUS = {
+  SUCCESS: "SUCCESS",
+  FAILED: "FAILED"
+};
+
+/** Event types processed by NotificationWorker for merchant-facing delivery */
+const WORKER_NOTIFICATION_TYPES = {
+  TICKET_CREATED: "TICKET_CREATED",
+  AGENT_REPLY: "AGENT_REPLY",
+  STATUS_CHANGED: "STATUS_CHANGED",
+  TICKET_RESOLVED: "TICKET_RESOLVED"
+};
+
+const OTP_CHANNELS = {
+  EMAIL: "email",
+  SMS: "sms"
+};
+
+/** Future provider identifiers for documentation and configuration */
+const FUTURE_PROVIDERS = ["SMTP", "FAST2SMS", "MSG91", "GUPSHUP"];
+
+module.exports = {
+  NOTIFICATION_PROVIDERS,
+  DELIVERY_STATUS,
+  WORKER_NOTIFICATION_TYPES,
+  OTP_CHANNELS,
+  FUTURE_PROVIDERS
+};

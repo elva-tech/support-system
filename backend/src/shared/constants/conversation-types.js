@@ -1,0 +1,13 @@
+const CONVERSATION_TYPES = Object.freeze({
+  MESSAGE: "MESSAGE",
+  INTERNAL_NOTE: "INTERNAL_NOTE",
+  SYSTEM: "SYSTEM"
+});
+
+const SENDER_TYPES = Object.freeze({
+  MERCHANT: "MERCHANT",
+  AGENT: "AGENT",
+  SYSTEM: "SYSTEM"
+});
+
+module.exports = { CONVERSATION_TYPES, SENDER_TYPES };
