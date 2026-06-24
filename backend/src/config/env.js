@@ -8,6 +8,17 @@ const parseFileSize = (value, fallback) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
 
+const parseCorsOrigins = (value) => {
+  if (!value) {
+    return ["http://localhost:4200"];
+  }
+
+  return value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+};
+
 module.exports = {
   nodeEnv: process.env.NODE_ENV || "development",
   isProduction,
@@ -17,7 +28,8 @@ module.exports = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "24h",
   otpMaxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS, 10) || 5,
   otpLockMinutes: parseInt(process.env.OTP_LOCK_MINUTES, 10) || 15,
-  corsOrigin: process.env.CORS_ORIGIN || "http://localhost:4200",
+  corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN),
+  corsAllowVercelPreviews: process.env.CORS_ALLOW_VERCEL_PREVIEWS === "true",
   internalApiKey: process.env.INTERNAL_API_KEY || "dev-internal-api-key-change-me",
   otpExpiresMinutes: parseInt(process.env.OTP_EXPIRES_MINUTES, 10) || 10,
   merchantSessionExpiresMs:

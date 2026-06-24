@@ -19,8 +19,31 @@ const attachmentRoutes = require("./modules/attachments/attachment.routes");
 
 const app = express();
 
+const isAllowedCorsOrigin = (origin) => {
+  if (!origin) {
+    return true;
+  }
+
+  if (env.corsOrigins.includes(origin)) {
+    return true;
+  }
+
+  if (env.corsAllowVercelPreviews && /^https:\/\/[\w-]+\.vercel\.app$/.test(origin)) {
+    return true;
+  }
+
+  return false;
+};
+
 app.use(helmet());
-app.use(cors({ origin: env.corsOrigin, credentials: true }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      callback(null, isAllowedCorsOrigin(origin));
+    },
+    credentials: true
+  })
+);
 app.use(morgan(env.isProduction ? "combined" : "dev"));
 app.use(express.json({ limit: "1mb" }));
 

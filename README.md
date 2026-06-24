@@ -217,6 +217,8 @@ Auditing, security hardening, observability, pagination, search, and deployment 
 
 Set `NODE_ENV=production` and configure all required env vars (`MONGODB_URI`, `JWT_SECRET`, `INTERNAL_API_KEY`, `CORS_ORIGIN`). Verify health: `GET /health`.
 
+**Render + Vercel:** See [DEPLOY.md](DEPLOY.md) for step-by-step production deployment. Frontend API URL is injected at build time via the `API_URL` environment variable on Vercel (see `frontend/.env.example`).
+
 ## Phase 6.5 — ELVA Notify Integration
 
 Delegates notification **delivery** to ELVA Notify with log-based fallback. OTP generation, storage, and verification remain in ELVA Support.

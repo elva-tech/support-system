@@ -1,0 +1,46 @@
+# Render Blueprint — ELVA Support API
+# Deploy: connect repo on Render → New Blueprint → select render.yaml
+# MongoDB: use MongoDB Atlas (Render does not include MongoDB on free tier).
+
+services:
+  - type: web
+    name: elva-support-api
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: INTERNAL_API_KEY
+        generateValue: true
+      - key: CORS_ORIGIN
+        sync: false
+      - key: API_BASE_URL
+        sync: false
+      - key: LOG_OTP_TO_CONSOLE
+        value: "false"
+      - key: EXPOSE_OTP_IN_RESPONSE
+        value: "false"
+      - key: GOOGLE_DRIVE_MOCK
+        value: "true"
+      - key: NOTIFICATION_PROVIDER
+        value: ELVA_NOTIFY
+      - key: NOTIFICATION_FALLBACK_ENABLED
+        value: "true"
+      - key: ELVA_NOTIFY_API_URL
+        value: https://api.notify.elvatech.in
+      - key: ELVA_NOTIFY_APP_ID
+        sync: false
+      - key: ELVA_NOTIFY_API_KEY
+        sync: false
+      - key: ELVA_NOTIFY_BRAND_ID
+        sync: false
+      - key: ELVA_NOTIFY_OTP_MODE
+        value: native
