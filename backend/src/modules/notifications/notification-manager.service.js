@@ -1,32 +1,44 @@
 const env = require("../../config/env");
 const NotificationEvent = require("./notification-event.model");
 const deliveryService = require("./notification-delivery.service");
-const { SmtpProvider, ElvaNotifyProvider, FallbackProvider } = require("./providers");
+const { SmtpProvider, ResendProvider, ElvaNotifyProvider, FallbackProvider } = require("./providers");
 const { NOTIFICATION_PROVIDERS } = require("../../shared/constants/notification-types");
 const { isSmtpConfigured } = require("./smtp.config");
+const { isResendConfigured } = require("./resend.config");
 const { usesElvaNotifyNativeOtp } = require("./elva-notify.config");
 const logger = require("../../shared/utils/logger");
 
 class NotificationManager {
   constructor() {
     this.smtpProvider = new SmtpProvider();
+    this.resendProvider = new ResendProvider();
     this.elvaNotifyProvider = new ElvaNotifyProvider();
     this.fallbackProvider = new FallbackProvider();
     this.fallbackEnabled = env.notifications.fallbackEnabled;
   }
 
-  _usesSmtpForEmail() {
-    return env.notifications.provider !== "ELVA_NOTIFY" || isSmtpConfigured();
-  }
-
   _emailProvider() {
-    return this._usesSmtpForEmail() ? this.smtpProvider : this.elvaNotifyProvider;
+    if (env.notifications.provider === "RESEND") {
+      return this.resendProvider;
+    }
+
+    if (env.notifications.provider === "ELVA_NOTIFY" && !isSmtpConfigured() && !isResendConfigured()) {
+      return this.elvaNotifyProvider;
+    }
+
+    return this.smtpProvider;
   }
 
   _emailProviderName() {
-    return this._usesSmtpForEmail()
-      ? NOTIFICATION_PROVIDERS.SMTP
-      : NOTIFICATION_PROVIDERS.ELVA_NOTIFY;
+    if (env.notifications.provider === "RESEND") {
+      return NOTIFICATION_PROVIDERS.RESEND;
+    }
+
+    if (env.notifications.provider === "ELVA_NOTIFY" && !isSmtpConfigured() && !isResendConfigured()) {
+      return NOTIFICATION_PROVIDERS.ELVA_NOTIFY;
+    }
+
+    return NOTIFICATION_PROVIDERS.SMTP;
   }
 
   /**
@@ -44,8 +56,8 @@ class NotificationManager {
     }
 
     return this._deliverWithFallback(
-      this.smtpProvider,
-      NOTIFICATION_PROVIDERS.SMTP,
+      this._emailProvider(),
+      this._emailProviderName(),
       "sendOtp",
       payload
     );

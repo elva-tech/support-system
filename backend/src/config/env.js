@@ -124,6 +124,11 @@ module.exports = {
       batchSize: parseInt(process.env.EMAIL_IMAP_BATCH_SIZE, 10) || 25,
       lookbackDays: parseInt(process.env.EMAIL_IMAP_LOOKBACK_DAYS, 10) || 3,
       mailbox: process.env.EMAIL_IMAP_MAILBOX || process.env.EMAIL_SUPPORT_ADDRESS || ""
+    },
+    resend: {
+      apiKey: process.env.RESEND_API_KEY || "",
+      fromName: process.env.RESEND_FROM_NAME || process.env.SMTP_FROM_NAME || "ELVA Support",
+      timeoutMs: parseInt(process.env.RESEND_TIMEOUT_MS, 10) || 15000
     }
   }
 };

@@ -39,6 +39,12 @@ const start = async () => {
       );
     }
 
+    if (env.isProduction && env.notifications.provider === "SMTP" && isSmtpConfigured()) {
+      logger.warn(
+        "Render free tier blocks outbound SMTP (ports 587/465). Use NOTIFICATION_PROVIDER=RESEND with RESEND_API_KEY, or upgrade to a paid Render plan."
+      );
+    }
+
     const server = app.listen(env.port, () => {
       logger.info("ELVA Support API started", {
         port: env.port,

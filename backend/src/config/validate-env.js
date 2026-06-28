@@ -1,5 +1,6 @@
 const logger = require("../shared/utils/logger");
 const { isSmtpConfigured } = require("../modules/notifications/smtp.config");
+const { isResendConfigured } = require("../modules/notifications/resend.config");
 
 const DEV_DEFAULTS = {
   MONGODB_URI: "mongodb://localhost:27017/elva-support",
@@ -73,9 +74,13 @@ const validateEnvironment = () => {
       ) {
         errors.push("ELVA_NOTIFY_BRAND_ID is required for native OTP mode in production");
       }
+    } else if (process.env.NOTIFICATION_PROVIDER === "RESEND") {
+      if (!isResendConfigured()) {
+        errors.push("RESEND_API_KEY is required when NOTIFICATION_PROVIDER=RESEND in production");
+      }
     } else if (!isSmtpConfigured()) {
       errors.push(
-        "SMTP email is not configured in production — set SMTP_HOST, SMTP_USER, and SMTP_PASS (or EMAIL_IMAP_PASSWORD)"
+        "SMTP email is not configured in production — set SMTP_HOST, SMTP_USER, and SMTP_PASS (or use NOTIFICATION_PROVIDER=RESEND with RESEND_API_KEY on Render free tier)"
       );
     }
   } else {

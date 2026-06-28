@@ -57,12 +57,9 @@ Copy from `backend/.env.example`. Set these in Render Dashboard → Environment:
 | `API_BASE_URL` | `https://support-system-qhjr.onrender.com` |
 | `ADMIN_EMAIL` | Your admin login email |
 | `ADMIN_PASSWORD` | Strong password (admin user created on first start) |
-| `NOTIFICATION_PROVIDER` | `SMTP` |
-| `EMAIL_SUPPORT_ADDRESS` | `support@elvatech.in` |
-| `SMTP_HOST` | `smtp.gmail.com` |
-| `SMTP_PORT` | `587` |
-| `SMTP_USER` | Gmail account (e.g. `tech.elva@gmail.com`) |
-| `SMTP_PASS` | Gmail App Password |
+| `NOTIFICATION_PROVIDER` | `RESEND` on Render **free** tier (SMTP blocked); `SMTP` on paid Render or local dev |
+| `RESEND_API_KEY` | From [resend.com](https://resend.com) (required when provider is RESEND) |
+| `EMAIL_SUPPORT_ADDRESS` | `support@elvatech.in` (must verify domain in Resend) |
 | `EMAIL_INBOUND_ENABLED` | `true` |
 | `EMAIL_IMAP_HOST` | `imap.gmail.com` |
 | `EMAIL_IMAP_USER` | Same Gmail account |
@@ -86,7 +83,21 @@ node -e "const c=require('crypto'); console.log('JWT_SECRET='+c.randomBytes(48).
 
 ### Gmail / support@ setup
 
-- SMTP login = Gmail account; **From** address = `support@elvatech.in` (configure "Send mail as" in Gmail).
+**Outbound (OTP, ticket emails):**
+
+- **Local dev:** Gmail SMTP (`NOTIFICATION_PROVIDER=SMTP`) works on your machine.
+- **Render free tier:** Outbound SMTP ports **587, 465, and 25 are blocked** by Render ([changelog](https://render.com/changelog/free-web-services-will-no-longer-allow-outbound-traffic-to-smtp-ports)). Gmail SMTP will always time out (~20s) and OTP will fail with 503.
+- **Fix:** Use **Resend** (HTTPS API, works on free tier) or upgrade Render to a **paid** plan and keep Gmail SMTP.
+
+**Resend setup (recommended for free Render):**
+
+1. Sign up at [resend.com](https://resend.com).
+2. Add domain `elvatech.in` and add the DNS records Resend gives you in Cloudflare.
+3. On Render, set `NOTIFICATION_PROVIDER=RESEND` and `RESEND_API_KEY=re_...`.
+4. Redeploy. Emails send as `support@elvatech.in` once the domain is verified.
+
+**Inbound (merchant replies):** IMAP on port 993 is not blocked — keep `EMAIL_IMAP_*` for Gmail polling.
+
 - IMAP polls the `support@elvatech.in` label/mailbox on the shared inbox.
 - Use a [Gmail App Password](https://myaccount.google.com/apppasswords), not your regular password.
 
@@ -141,5 +152,6 @@ npx serve dist/frontend/browser -l 4200 -s
 | OTP not arriving | Merchant must exist in prod DB; SMTP must be configured; check Render logs |
 | OTP slow then no email | Set `NOTIFICATION_FALLBACK_ENABLED=false` on Render; verify `SMTP_PASS` is a Gmail App Password; search logs for `[FallbackProvider]` (means SMTP failed but UI still succeeded) |
 | `ENETUNREACH` / IPv6 SMTP error on Render | Redeploy latest code (forces IPv4 for Gmail). Error looks like `connect ENETUNREACH 2607:f8b0:...:587` |
+| OTP times out ~20s then 503 on Render free | **Render blocks SMTP** on free tier — set `NOTIFICATION_PROVIDER=RESEND` + `RESEND_API_KEY`, or upgrade to paid Render |
 | `Route not found` at backend URL | Normal in production — `LOG_VIEWER_ENABLED=false`. Use Render Dashboard → Logs, or `/health` to verify the API |
 | Login works locally but not on Vercel | Check `API_URL` ends with `/api` and CORS matches frontend domain |
