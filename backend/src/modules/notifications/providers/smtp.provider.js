@@ -20,7 +20,10 @@ const getTransport = () => {
     auth: {
       user: cfg.user,
       pass: cfg.password
-    }
+    },
+    connectionTimeout: cfg.connectionTimeoutMs,
+    greetingTimeout: cfg.greetingTimeoutMs,
+    socketTimeout: cfg.socketTimeoutMs
   });
 
   return transport;

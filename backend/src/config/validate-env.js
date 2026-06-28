@@ -40,6 +40,12 @@ const validateEnvironment = () => {
       errors.push("LOG_VIEWER_ENABLED must be false in production");
     }
 
+    if (process.env.NOTIFICATION_FALLBACK_ENABLED === "true") {
+      errors.push(
+        "NOTIFICATION_FALLBACK_ENABLED must be false in production — fallback only logs OTP/email and does not send real mail"
+      );
+    }
+
     if (!process.env.FRONTEND_URL && !process.env.CORS_ORIGIN) {
       errors.push("FRONTEND_URL or CORS_ORIGIN is required in production (for email links)");
     }

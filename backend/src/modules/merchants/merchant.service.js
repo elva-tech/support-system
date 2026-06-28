@@ -108,7 +108,11 @@ const requestOtp = async (email) => {
     );
   }
 
-  logger.info("OTP delivery accepted", { email: normalizedEmail, provider: delivery.provider });
+  logger.info("OTP delivery accepted", {
+    email: normalizedEmail,
+    provider: delivery.provider,
+    viaFallback: delivery.provider === "FALLBACK"
+  });
 
   return otpSentResponse({
     ...(env.exposeOtpInResponse && otp && { otp })

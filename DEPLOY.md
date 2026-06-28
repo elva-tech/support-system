@@ -139,4 +139,6 @@ npx serve dist/frontend/browser -l 4200 -s
 | `CORS_ORIGIN is required` | Set `https://support.elvatech.in` |
 | `SMTP email is not configured` | Set `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` |
 | OTP not arriving | Merchant must exist in prod DB; SMTP must be configured; check Render logs |
+| OTP slow then no email | Set `NOTIFICATION_FALLBACK_ENABLED=false` on Render; verify `SMTP_PASS` is a Gmail App Password; search logs for `[FallbackProvider]` (means SMTP failed but UI still succeeded) |
+| `Route not found` at backend URL | Normal in production — `LOG_VIEWER_ENABLED=false`. Use Render Dashboard → Logs, or `/health` to verify the API |
 | Login works locally but not on Vercel | Check `API_URL` ends with `/api` and CORS matches frontend domain |

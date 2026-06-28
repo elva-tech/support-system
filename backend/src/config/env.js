@@ -106,7 +106,10 @@ module.exports = {
         (parseInt(process.env.SMTP_PORT, 10) || 587) === 465,
       user: process.env.SMTP_USER || process.env.EMAIL_IMAP_USER || "",
       password: process.env.SMTP_PASS || process.env.EMAIL_IMAP_PASSWORD || "",
-      fromName: process.env.SMTP_FROM_NAME || "ELVA Support"
+      fromName: process.env.SMTP_FROM_NAME || "ELVA Support",
+      connectionTimeoutMs: parseInt(process.env.SMTP_CONNECTION_TIMEOUT_MS, 10) || 20000,
+      greetingTimeoutMs: parseInt(process.env.SMTP_GREETING_TIMEOUT_MS, 10) || 20000,
+      socketTimeoutMs: parseInt(process.env.SMTP_SOCKET_TIMEOUT_MS, 10) || 30000
     },
     inboundEnabled: process.env.EMAIL_INBOUND_ENABLED === "true",
     imap: {
