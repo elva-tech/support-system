@@ -3,13 +3,7 @@ const { EMAIL_DIRECTION } = require("../../shared/constants/communication-channe
 const emailThreadService = require("./email-thread.service");
 const env = require("../../config/env");
 const logger = require("../../shared/utils/logger");
-
-const escapeHtml = (value) =>
-  String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+const { renderTicketReplyEmail } = require("../notifications/email-templates");
 
 const sendTimelineEmail = async ({
   ticket,
@@ -32,12 +26,12 @@ const sendTimelineEmail = async ({
     ? `${emailThreadService.formatTicketTag(ticketNumber)} ${ticket.subject}`
     : emailThreadService.buildThreadedSubject(ticketNumber, ticket.subject);
 
-  const html = `
-    <p>${escapeHtml(senderName)} (${escapeHtml(senderType)}) wrote:</p>
-    <p>${escapeHtml(message).replace(/\n/g, "<br/>")}</p>
-    <hr/>
-    <p style="color:#64748b;font-size:12px;">Ticket ${escapeHtml(ticketNumber)} — ELVA Support</p>
-  `;
+  const html = renderTicketReplyEmail({
+    senderName,
+    senderType,
+    message,
+    ticketNumber
+  });
 
   const headers = {
     "Message-ID": messageId,

@@ -2,6 +2,7 @@ const env = require("../../../config/env");
 const NotificationProvider = require("./notification-provider.base");
 const { NOTIFICATION_PROVIDERS, OTP_CHANNELS } = require("../../../shared/constants/notification-types");
 const { getElvaNotifyConfig, isElvaNotifyConfigured, usesElvaNotifyNativeOtp } = require("../elva-notify.config");
+const { renderOtpEmail } = require("../email-templates");
 
 class ElvaNotifyProvider extends NotificationProvider {
   get name() {
@@ -30,7 +31,10 @@ class ElvaNotifyProvider extends NotificationProvider {
       this._notifyBody({
         to: [payload.email],
         subject: "Your ELVA Support verification code",
-        html: `<p>Your ELVA Support verification code is <strong>${payload.otp}</strong>.</p><p>It expires in ${payload.expiresInMinutes} minutes.</p>`
+        html: renderOtpEmail({
+          otp: payload.otp,
+          expiresInMinutes: payload.expiresInMinutes
+        })
       })
     );
   }

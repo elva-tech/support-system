@@ -3,6 +3,7 @@ const env = require("../../../config/env");
 const NotificationProvider = require("./notification-provider.base");
 const { NOTIFICATION_PROVIDERS } = require("../../../shared/constants/notification-types");
 const { getSmtpConfig, isSmtpConfigured } = require("../smtp.config");
+const { renderOtpEmail, renderNotificationEmail } = require("../email-templates");
 const logger = require("../../../shared/utils/logger");
 
 let transport = null;
@@ -36,13 +37,6 @@ const formatFrom = (address) => {
   return fromName ? `"${fromName}" <${fromAddress}>` : fromAddress;
 };
 
-const escapeHtml = (value) =>
-  String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-
 class SmtpProvider extends NotificationProvider {
   get name() {
     return NOTIFICATION_PROVIDERS.SMTP;
@@ -60,7 +54,10 @@ class SmtpProvider extends NotificationProvider {
     return this.sendEmail({
       to: payload.email,
       subject: "Your ELVA Support verification code",
-      html: `<p>Your ELVA Support verification code is <strong>${escapeHtml(payload.otp)}</strong>.</p><p>It expires in ${payload.expiresInMinutes} minutes.</p>`
+      html: renderOtpEmail({
+        otp: payload.otp,
+        expiresInMinutes: payload.expiresInMinutes
+      })
     });
   }
 
@@ -69,7 +66,13 @@ class SmtpProvider extends NotificationProvider {
       return { success: false, error: "SMTP is not configured (SMTP_HOST, SMTP_USER, SMTP_PASS)" };
     }
 
-    const html = payload.html || `<p>${escapeHtml(payload.body)}</p>`;
+    const html =
+      payload.html ||
+      renderNotificationEmail({
+        subject: payload.subject,
+        body: payload.body,
+        merchantName: payload.metadata?.merchantName
+      });
 
     return this.sendEmail({
       to: payload.recipientEmail,

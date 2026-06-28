@@ -2,16 +2,10 @@ const env = require("../../../config/env");
 const NotificationProvider = require("./notification-provider.base");
 const { NOTIFICATION_PROVIDERS } = require("../../../shared/constants/notification-types");
 const { isResendConfigured } = require("../resend.config");
+const { renderOtpEmail, renderNotificationEmail } = require("../email-templates");
 const logger = require("../../../shared/utils/logger");
 
 const RESEND_API_URL = "https://api.resend.com/emails";
-
-const escapeHtml = (value) =>
-  String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 
 const formatFrom = (address) => {
   const fromAddress = address || env.email.supportAddress;
@@ -36,7 +30,10 @@ class ResendProvider extends NotificationProvider {
     return this.sendEmail({
       to: payload.email,
       subject: "Your ELVA Support verification code",
-      html: `<p>Your ELVA Support verification code is <strong>${escapeHtml(payload.otp)}</strong>.</p><p>It expires in ${payload.expiresInMinutes} minutes.</p>`
+      html: renderOtpEmail({
+        otp: payload.otp,
+        expiresInMinutes: payload.expiresInMinutes
+      })
     });
   }
 
@@ -45,7 +42,13 @@ class ResendProvider extends NotificationProvider {
       return { success: false, error: "Resend is not configured (RESEND_API_KEY)" };
     }
 
-    const html = payload.html || `<p>${escapeHtml(payload.body)}</p>`;
+    const html =
+      payload.html ||
+      renderNotificationEmail({
+        subject: payload.subject,
+        body: payload.body,
+        merchantName: payload.metadata?.merchantName
+      });
 
     return this.sendEmail({
       to: payload.recipientEmail,

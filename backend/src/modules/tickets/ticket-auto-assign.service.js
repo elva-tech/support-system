@@ -8,13 +8,7 @@ const { logAudit } = require("../audit/audit.service");
 const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/constants/audit-actions");
 const { ROLES } = require("../../shared/constants/roles");
 const { ACTIVE_TICKET_STATUSES } = require("../../shared/constants/ticket-statuses");
-
-const escapeHtml = (value) =>
-  String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+const { renderTeamLeadAlertEmail } = require("../notifications/email-templates");
 
 const countActiveTicketsByAgent = async (agentIds) => {
   if (!agentIds.length) {
@@ -79,18 +73,16 @@ const notifyTeamLeadUnassigned = async (ticket, team, reason) => {
       ? "All agents on your team currently have open tickets, so this ticket was not auto-assigned."
       : "There are no active agents on your team, so this ticket was not auto-assigned.";
 
-  const html = `
-    <p>Hi ${escapeHtml(lead.firstName)},</p>
-    <p>Ticket <strong>${escapeHtml(ticket.ticketNumber)}</strong> — "${escapeHtml(ticket.subject)}" is waiting in your team queue.</p>
-    <p>${reasonLine} Please assign it to an agent or to yourself when you are ready.</p>
-    <p><a href="${ticketUrl}">Open ticket in ELVA Support</a></p>
-    <p>— ELVA Support</p>
-  `;
-
   const result = await notificationManager.sendEmail({
     to: lead.email,
     subject: `[Action needed] Ticket ${ticket.ticketNumber} needs assignment`,
-    html
+    html: renderTeamLeadAlertEmail({
+      firstName: lead.firstName,
+      ticketNumber: ticket.ticketNumber,
+      subject: ticket.subject,
+      reasonLine: `${reasonLine} Please assign it to an agent or to yourself when you are ready.`,
+      ticketUrl
+    })
   });
 
   if (!result.success) {
