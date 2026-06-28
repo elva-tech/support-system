@@ -109,7 +109,8 @@ module.exports = {
       fromName: process.env.SMTP_FROM_NAME || "ELVA Support",
       connectionTimeoutMs: parseInt(process.env.SMTP_CONNECTION_TIMEOUT_MS, 10) || 20000,
       greetingTimeoutMs: parseInt(process.env.SMTP_GREETING_TIMEOUT_MS, 10) || 20000,
-      socketTimeoutMs: parseInt(process.env.SMTP_SOCKET_TIMEOUT_MS, 10) || 30000
+      socketTimeoutMs: parseInt(process.env.SMTP_SOCKET_TIMEOUT_MS, 10) || 30000,
+      family: parseInt(process.env.SMTP_FAMILY, 10) || 4
     },
     inboundEnabled: process.env.EMAIL_INBOUND_ENABLED === "true",
     imap: {

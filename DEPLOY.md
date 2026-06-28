@@ -140,5 +140,6 @@ npx serve dist/frontend/browser -l 4200 -s
 | `SMTP email is not configured` | Set `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` |
 | OTP not arriving | Merchant must exist in prod DB; SMTP must be configured; check Render logs |
 | OTP slow then no email | Set `NOTIFICATION_FALLBACK_ENABLED=false` on Render; verify `SMTP_PASS` is a Gmail App Password; search logs for `[FallbackProvider]` (means SMTP failed but UI still succeeded) |
+| `ENETUNREACH` / IPv6 SMTP error on Render | Redeploy latest code (forces IPv4 for Gmail). Error looks like `connect ENETUNREACH 2607:f8b0:...:587` |
 | `Route not found` at backend URL | Normal in production — `LOG_VIEWER_ENABLED=false`. Use Render Dashboard → Logs, or `/health` to verify the API |
 | Login works locally but not on Vercel | Check `API_URL` ends with `/api` and CORS matches frontend domain |

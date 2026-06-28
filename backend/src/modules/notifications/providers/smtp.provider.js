@@ -17,6 +17,7 @@ const getTransport = () => {
     host: cfg.host,
     port: cfg.port,
     secure: cfg.secure,
+    family: cfg.family,
     auth: {
       user: cfg.user,
       pass: cfg.password

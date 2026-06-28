@@ -26,6 +26,10 @@ const { logsViewerMiddleware } = require("./shared/http/logs-viewer");
 
 const app = express();
 
+if (env.isProduction) {
+  app.set("trust proxy", 1);
+}
+
 const isAllowedCorsOrigin = (origin) => {
   if (!origin) {
     return true;

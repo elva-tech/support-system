@@ -1,5 +1,12 @@
 require("dotenv").config();
 
+const dns = require("dns");
+
+// Render and other cloud hosts often lack working IPv6 routes to Gmail (ENETUNREACH).
+if (typeof dns.setDefaultResultOrder === "function") {
+  dns.setDefaultResultOrder("ipv4first");
+}
+
 const { validateEnvironment } = require("./config/validate-env");
 const app = require("./app");
 const env = require("./config/env");
