@@ -1,56 +1,58 @@
 const env = require("../../config/env");
 const NotificationEvent = require("./notification-event.model");
 const deliveryService = require("./notification-delivery.service");
-const { ElvaNotifyProvider, FallbackProvider } = require("./providers");
+const { SmtpProvider, ElvaNotifyProvider, FallbackProvider } = require("./providers");
 const { NOTIFICATION_PROVIDERS } = require("../../shared/constants/notification-types");
+const { isSmtpConfigured } = require("./smtp.config");
+const { usesElvaNotifyNativeOtp } = require("./elva-notify.config");
 const logger = require("../../shared/utils/logger");
 
 class NotificationManager {
   constructor() {
-    this.primaryProvider = new ElvaNotifyProvider();
+    this.smtpProvider = new SmtpProvider();
+    this.elvaNotifyProvider = new ElvaNotifyProvider();
     this.fallbackProvider = new FallbackProvider();
     this.fallbackEnabled = env.notifications.fallbackEnabled;
   }
 
+  _usesSmtpForEmail() {
+    return env.notifications.provider !== "ELVA_NOTIFY" || isSmtpConfigured();
+  }
+
+  _emailProvider() {
+    return this._usesSmtpForEmail() ? this.smtpProvider : this.elvaNotifyProvider;
+  }
+
+  _emailProviderName() {
+    return this._usesSmtpForEmail()
+      ? NOTIFICATION_PROVIDERS.SMTP
+      : NOTIFICATION_PROVIDERS.ELVA_NOTIFY;
+  }
+
   /**
-   * Deliver OTP via ELVA Notify, falling back to log-based provider on failure.
-   * OTP generation, storage, and verification remain in merchant.service.
+   * Deliver OTP via SMTP (relay mode) or ELVA Notify (native mode), with log fallback.
+   * OTP generation, storage, and verification remain in merchant.service for relay mode.
    */
   async sendOtp(payload) {
-    const primaryResult = await this._tryProvider(this.primaryProvider, "sendOtp", payload);
-
-    if (primaryResult.success) {
-      await deliveryService.recordSuccess(NOTIFICATION_PROVIDERS.ELVA_NOTIFY);
-      return { success: true, provider: NOTIFICATION_PROVIDERS.ELVA_NOTIFY };
+    if (usesElvaNotifyNativeOtp()) {
+      return this._deliverWithFallback(
+        this.elvaNotifyProvider,
+        NOTIFICATION_PROVIDERS.ELVA_NOTIFY,
+        "sendOtp",
+        payload
+      );
     }
 
-    await deliveryService.recordFailure(
-      NOTIFICATION_PROVIDERS.ELVA_NOTIFY,
-      primaryResult.error || "ELVA Notify OTP delivery failed"
+    return this._deliverWithFallback(
+      this.smtpProvider,
+      NOTIFICATION_PROVIDERS.SMTP,
+      "sendOtp",
+      payload
     );
-
-    if (!this.fallbackEnabled) {
-      logger.warn("OTP delivery failed and fallback is disabled", { email: payload.email });
-      return { success: false, provider: NOTIFICATION_PROVIDERS.ELVA_NOTIFY, error: primaryResult.error };
-    }
-
-    const fallbackResult = await this._tryProvider(this.fallbackProvider, "sendOtp", payload);
-
-    if (fallbackResult.success) {
-      await deliveryService.recordSuccess(NOTIFICATION_PROVIDERS.FALLBACK);
-      return { success: true, provider: NOTIFICATION_PROVIDERS.FALLBACK };
-    }
-
-    await deliveryService.recordFailure(
-      NOTIFICATION_PROVIDERS.FALLBACK,
-      fallbackResult.error || "Fallback OTP delivery failed"
-    );
-
-    return { success: false, provider: NOTIFICATION_PROVIDERS.FALLBACK, error: fallbackResult.error };
   }
 
   async verifyOtp(payload) {
-    const primaryResult = await this._tryProvider(this.primaryProvider, "verifyOtp", payload);
+    const primaryResult = await this._tryProvider(this.elvaNotifyProvider, "verifyOtp", payload);
 
     if (primaryResult.success) {
       await deliveryService.recordSuccess(NOTIFICATION_PROVIDERS.ELVA_NOTIFY);
@@ -66,7 +68,7 @@ class NotificationManager {
   }
 
   async resendOtp(payload) {
-    const primaryResult = await this._tryProvider(this.primaryProvider, "resendOtp", payload);
+    const primaryResult = await this._tryProvider(this.elvaNotifyProvider, "resendOtp", payload);
 
     if (primaryResult.success) {
       await deliveryService.recordSuccess(NOTIFICATION_PROVIDERS.ELVA_NOTIFY);
@@ -82,33 +84,31 @@ class NotificationManager {
   }
 
   /**
-   * Deliver a queued notification_event via ELVA Notify with optional fallback.
+   * Deliver a queued notification_event via SMTP with optional log fallback.
    * Marks the event processed after delivery attempt(s) complete.
    */
   async sendNotification(event) {
     const payload = event.deliveryPayload;
+    const provider = this._emailProvider();
+    const providerName = this._emailProviderName();
 
-    const primaryResult = await this._tryProvider(
-      this.primaryProvider,
-      "sendNotification",
-      payload
-    );
+    const primaryResult = await this._tryProvider(provider, "sendNotification", payload);
 
     if (primaryResult.success) {
-      await deliveryService.recordSuccess(NOTIFICATION_PROVIDERS.ELVA_NOTIFY, event._id);
+      await deliveryService.recordSuccess(providerName, event._id);
       await this._markEventProcessed(event._id);
-      return { success: true, provider: NOTIFICATION_PROVIDERS.ELVA_NOTIFY };
+      return { success: true, provider: providerName };
     }
 
     await deliveryService.recordFailure(
-      NOTIFICATION_PROVIDERS.ELVA_NOTIFY,
-      primaryResult.error || "ELVA Notify delivery failed",
+      providerName,
+      primaryResult.error || "Email delivery failed",
       event._id
     );
 
     if (!this.fallbackEnabled) {
       await this._markEventProcessed(event._id);
-      return { success: false, provider: NOTIFICATION_PROVIDERS.ELVA_NOTIFY };
+      return { success: false, provider: providerName };
     }
 
     const fallbackResult = await this._tryProvider(
@@ -132,6 +132,70 @@ class NotificationManager {
       success: fallbackResult.success,
       provider: NOTIFICATION_PROVIDERS.FALLBACK
     };
+  }
+
+  async sendEmail(payload) {
+    const provider = this._emailProvider();
+    const providerName = this._emailProviderName();
+    const result = await this._tryProvider(provider, "sendEmail", payload);
+
+    if (result.success) {
+      await deliveryService.recordSuccess(providerName);
+      return { ...result, provider: providerName };
+    }
+
+    await deliveryService.recordFailure(providerName, result.error || "Email delivery failed");
+
+    if (!this.fallbackEnabled) {
+      return { ...result, provider: providerName };
+    }
+
+    const fallbackResult = await this._tryProvider(this.fallbackProvider, "sendEmail", payload);
+
+    if (fallbackResult.success) {
+      await deliveryService.recordSuccess(NOTIFICATION_PROVIDERS.FALLBACK);
+      return { ...fallbackResult, provider: NOTIFICATION_PROVIDERS.FALLBACK };
+    }
+
+    await deliveryService.recordFailure(
+      NOTIFICATION_PROVIDERS.FALLBACK,
+      fallbackResult.error || "Fallback email delivery failed"
+    );
+
+    return { ...fallbackResult, provider: NOTIFICATION_PROVIDERS.FALLBACK };
+  }
+
+  async _deliverWithFallback(provider, providerName, method, payload) {
+    const primaryResult = await this._tryProvider(provider, method, payload);
+
+    if (primaryResult.success) {
+      await deliveryService.recordSuccess(providerName);
+      return { success: true, provider: providerName };
+    }
+
+    await deliveryService.recordFailure(
+      providerName,
+      primaryResult.error || `${providerName} OTP delivery failed`
+    );
+
+    if (!this.fallbackEnabled) {
+      logger.warn("OTP delivery failed and fallback is disabled", { email: payload.email });
+      return { success: false, provider: providerName, error: primaryResult.error };
+    }
+
+    const fallbackResult = await this._tryProvider(this.fallbackProvider, method, payload);
+
+    if (fallbackResult.success) {
+      await deliveryService.recordSuccess(NOTIFICATION_PROVIDERS.FALLBACK);
+      return { success: true, provider: NOTIFICATION_PROVIDERS.FALLBACK };
+    }
+
+    await deliveryService.recordFailure(
+      NOTIFICATION_PROVIDERS.FALLBACK,
+      fallbackResult.error || "Fallback OTP delivery failed"
+    );
+
+    return { success: false, provider: NOTIFICATION_PROVIDERS.FALLBACK, error: fallbackResult.error };
   }
 
   async _tryProvider(provider, method, payload) {

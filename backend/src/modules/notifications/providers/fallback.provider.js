@@ -4,8 +4,7 @@ const { NOTIFICATION_PROVIDERS } = require("../../../shared/constants/notificati
 
 /**
  * Development and disaster-recovery fallback.
- * Logs OTP and notification payloads instead of sending via SMTP/SMS.
- * Replace or extend with SMTP, Fast2SMS, MSG91, or Gupshup in future phases.
+ * Logs OTP and email payloads instead of sending via SMTP/SMS.
  */
 class FallbackProvider extends NotificationProvider {
   get name() {
@@ -13,6 +12,17 @@ class FallbackProvider extends NotificationProvider {
   }
 
   async sendOtp(payload) {
+    if (!payload.otp) {
+      logger.warn("[FallbackProvider] Cannot deliver OTP — no code available", {
+        channel: payload.channel,
+        email: payload.email
+      });
+      return {
+        success: false,
+        error: "Email delivery is unavailable. SMTP could not send the verification code."
+      };
+    }
+
     logger.info("[FallbackProvider] OTP delivery", {
       channel: payload.channel,
       email: payload.email,
@@ -35,6 +45,17 @@ class FallbackProvider extends NotificationProvider {
     });
 
     return { success: true, messageId: `fallback-notification-${Date.now()}` };
+  }
+
+  async sendEmail(payload) {
+    logger.info("[FallbackProvider] Email delivery", {
+      to: payload.to,
+      subject: payload.subject,
+      from: payload.from || null,
+      replyTo: payload.replyTo || null
+    });
+
+    return { success: true, messageId: `fallback-email-${Date.now()}` };
   }
 }
 

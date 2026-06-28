@@ -1,5 +1,9 @@
 const mongoose = require("mongoose");
 const { CONVERSATION_TYPES, SENDER_TYPES } = require("../../shared/constants/conversation-types");
+const {
+  CONVERSATION_SOURCES,
+  ACTIVE_CONVERSATION_SOURCES
+} = require("../../shared/constants/communication-channels");
 
 const ticketConversationSchema = new mongoose.Schema(
   {
@@ -32,6 +36,19 @@ const ticketConversationSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true
+    },
+    source: {
+      type: String,
+      enum: [...ACTIVE_CONVERSATION_SOURCES, ...Object.values(CONVERSATION_SOURCES)],
+      default: CONVERSATION_SOURCES.PORTAL
+    },
+    channelMetadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
+    },
+    externalMessageId: {
+      type: String,
+      trim: true
     }
   },
   {
@@ -40,5 +57,13 @@ const ticketConversationSchema = new mongoose.Schema(
 );
 
 ticketConversationSchema.index({ ticketId: 1, createdAt: 1 });
+ticketConversationSchema.index({ source: 1, createdAt: -1 });
+ticketConversationSchema.index(
+  { externalMessageId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { externalMessageId: { $type: "string" } }
+  }
+);
 
 module.exports = mongoose.model("TicketConversation", ticketConversationSchema);

@@ -1,10 +1,11 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MerchantApiService } from '../../services/merchant-api.service';
 import { MerchantFlowService } from '../../services/merchant-flow.service';
+import { formatApiError } from '../../../shared/utils/api-error.util';
 import { ElvaFooterComponent } from '../../../shared/components/elva-footer/elva-footer.component';
 import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva-header.component';
 
@@ -22,6 +23,12 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
             <h1 class="text-xl font-bold text-slate-900 sm:text-2xl">Welcome back</h1>
             <p class="mt-2 text-sm text-slate-500">Enter your registered email to receive an OTP</p>
           </div>
+
+          @if (sessionExpired()) {
+            <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Your session ended. Please sign in again.
+            </div>
+          }
 
           @if (error()) {
             <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -58,18 +65,28 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
     </div>
   `
 })
-export class MerchantLoginComponent {
+export class MerchantLoginComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(MerchantApiService);
   private readonly flow = inject(MerchantFlowService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly loading = signal(false);
   readonly error = signal('');
+  readonly sessionExpired = signal(false);
 
   readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]]
   });
+
+  ngOnInit(): void {
+    const email = this.route.snapshot.queryParamMap.get('email');
+    if (email) {
+      this.form.patchValue({ email });
+    }
+    this.sessionExpired.set(this.route.snapshot.queryParamMap.get('session') === 'expired');
+  }
 
   onSubmit(): void {
     if (this.form.invalid) return;
@@ -80,6 +97,12 @@ export class MerchantLoginComponent {
 
     this.api.requestOtp(email).subscribe({
       next: (res) => {
+        if (!res.sent) {
+          this.error.set(res.message || 'We could not send a verification code to this email.');
+          this.loading.set(false);
+          return;
+        }
+
         this.flow.setPendingEmail(email);
         this.router.navigate(['/merchant/verify-otp'], {
           queryParams: { email },
@@ -87,7 +110,7 @@ export class MerchantLoginComponent {
         });
       },
       error: (err: HttpErrorResponse) => {
-        this.error.set(err.error?.message || 'Failed to send OTP');
+        this.error.set(formatApiError(err, 'Failed to send verification code. Please try again.'));
         this.loading.set(false);
       },
       complete: () => this.loading.set(false)

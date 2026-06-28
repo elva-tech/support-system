@@ -11,6 +11,7 @@ const {
   TICKET_STATUSES,
   ACTIVE_TICKET_STATUSES
 } = require("../../shared/constants/ticket-statuses");
+const { resolveTeamForApplication } = require("../teams/application-team-routing.service");
 
 const populateOptions = [
   { path: "applicationId", select: "name code" },
@@ -25,7 +26,7 @@ const listModulesForMerchant = async (merchant) => {
     applicationId: merchant.applicationId,
     isActive: true
   })
-    .select("name code defaultTeamId")
+    .select("name code")
     .sort({ name: 1 });
 };
 
@@ -40,8 +41,14 @@ const createForMerchant = async (merchant, data) => {
     throw new ApiError(400, "Invalid module for your application");
   }
 
-  if (!moduleDoc.defaultTeamId) {
-    throw new ApiError(400, "Selected module has no default team configured for routing");
+  const teamId = data.teamId || (await resolveTeamForApplication(merchant.applicationId));
+
+  if (data.teamId) {
+    const Team = require("../teams/team.model");
+    const team = await Team.findOne({ _id: data.teamId, isActive: true });
+    if (!team) {
+      throw new ApiError(400, "Selected team not found");
+    }
   }
 
   const ticketNumber = await generateTicketNumber(merchant.applicationCode);
@@ -52,10 +59,12 @@ const createForMerchant = async (merchant, data) => {
     applicationCode: merchant.applicationCode,
     moduleId: moduleDoc._id,
     merchantId: merchant._id,
-    teamId: moduleDoc.defaultTeamId,
+    teamId,
     subject: data.subject,
     description: data.description,
-    status: TICKET_STATUSES.OPEN
+    status: TICKET_STATUSES.OPEN,
+    ...(data.source ? { source: data.source } : {}),
+    ...(data.channelMetadata ? { channelMetadata: data.channelMetadata } : {})
   });
 
   await logAudit({
@@ -69,10 +78,45 @@ const createForMerchant = async (merchant, data) => {
       ticketNumber: ticket.ticketNumber,
       subject: ticket.subject,
       moduleId: moduleDoc._id.toString()
-    }
+    },
+    skipNotificationEvent: data.skipTicketCreatedNotification === true
   });
 
+  const { autoAssignOnCreate } = require("./ticket-auto-assign.service");
+  await autoAssignOnCreate(ticket);
+
   return Ticket.findById(ticket._id).populate(populateOptions);
+};
+
+const createFromChannel = async ({
+  merchant,
+  moduleId,
+  subject,
+  description,
+  source = "PORTAL",
+  channelMetadata = {}
+}) => {
+  const ticket = await createForMerchant(merchant, {
+    moduleId,
+    subject,
+    description,
+    source,
+    channelMetadata,
+    skipTicketCreatedNotification: true
+  });
+
+  const emailOutboundService = require("../email/email-outbound.service");
+  await emailOutboundService.sendTimelineEmail({
+    ticket,
+    merchant: ticket.merchantId,
+    message: description,
+    senderName: merchant.merchantName,
+    senderType: "MERCHANT",
+    conversationId: null,
+    isNewTicket: true
+  });
+
+  return ticket;
 };
 
 const listForMerchant = async (merchantId) => {
@@ -168,6 +212,7 @@ const getById = async (ticketId) => {
 module.exports = {
   listModulesForMerchant,
   createForMerchant,
+  createFromChannel,
   listForMerchant,
   getForMerchant,
   getStatsForMerchant,

@@ -5,42 +5,48 @@ process.env.NOTIFICATION_WORKER_ENABLED = "false";
 process.env.GOOGLE_DRIVE_MOCK = "true";
 process.env.NOTIFICATION_FALLBACK_ENABLED = "true";
 process.env.EXPOSE_OTP_IN_RESPONSE = "true";
+process.env.ELVA_NOTIFY_APP_ID = "";
+process.env.ELVA_NOTIFY_API_KEY = "";
+process.env.ELVA_NOTIFY_BRAND_ID = "";
+process.env.ELVA_NOTIFY_OTP_MODE = "relay";
 process.env.RATE_LIMIT_OTP_MAX = "100";
 process.env.RATE_LIMIT_LOGIN_MAX = "100";
 
-const { MongoMemoryServer } = require("mongodb-memory-server");
 const mongoose = require("mongoose");
+const { assertSafeToDrop, isSafeTestUri } = require("../src/config/db-safety");
 
-let mongoServer;
+const testMongoUri = process.env.MONGODB_URI;
 
-const clearConfigCache = () => {
-  const paths = [
-    require.resolve("../src/config/env"),
-    require.resolve("../src/config/database")
-  ];
-  paths.forEach((modulePath) => {
-    delete require.cache[modulePath];
-  });
+const safeDropDatabase = async () => {
+  if (!mongoose.connection.db) {
+    return;
+  }
+
+  assertSafeToDrop(testMongoUri);
+  await mongoose.connection.db.dropDatabase();
 };
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  process.env.MONGODB_URI = mongoServer.getUri();
-  clearConfigCache();
+  if (!isSafeTestUri(testMongoUri)) {
+    throw new Error(`Tests refused to start — MONGODB_URI is not isolated: ${testMongoUri}`);
+  }
+
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+  }
 
   const { connectDatabase } = require("../src/config/database");
   await connectDatabase();
 });
 
+beforeEach(async () => {
+  await safeDropDatabase();
+});
+
 afterAll(async () => {
   await mongoose.disconnect();
-  if (mongoServer) {
-    await mongoServer.stop();
-  }
 });
 
 afterEach(async () => {
-  if (mongoose.connection.db) {
-    await mongoose.connection.db.dropDatabase();
-  }
+  await safeDropDatabase();
 });

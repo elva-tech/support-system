@@ -15,7 +15,12 @@ if (!apiUrl) {
   process.exit(0);
 }
 
-const normalized = apiUrl.replace(/\/$/, '');
+let normalized = apiUrl.replace(/\/$/, '');
+
+if (normalized.startsWith('http') && !normalized.endsWith('/api')) {
+  normalized = `${normalized}/api`;
+  console.warn('API_URL did not end with /api — appended automatically:', normalized);
+}
 const outPath = path.join(__dirname, '../src/environments/environment.prod.ts');
 const content = `export const environment = {
   production: true,

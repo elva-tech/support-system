@@ -73,6 +73,8 @@ export class ShellComponent {
     { label: 'Applications', path: '/applications', adminOnly: true },
     { label: 'Modules', path: '/modules', adminOnly: true },
     { label: 'Teams', path: '/teams', adminOnly: true },
+    { label: 'Merchants', path: '/merchants', adminOnly: true },
+    { label: 'Inbound Mail', path: '/inbound-mail', adminOnly: true },
     { label: 'Users', path: '/users', adminOnly: true }
   ];
 

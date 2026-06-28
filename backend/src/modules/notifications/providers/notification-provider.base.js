@@ -26,8 +26,8 @@
 
 /**
  * Base contract for notification providers.
- * Implementations: ElvaNotifyProvider, FallbackProvider
- * Future: SMTP, Fast2SMS, MSG91, Gupshup
+ * Implementations: SmtpProvider, ElvaNotifyProvider, FallbackProvider
+ * Future: Fast2SMS, MSG91, Gupshup
  */
 class NotificationProvider {
   /**

@@ -1,6 +1,6 @@
 # Render Blueprint — ELVA Support API
-# Deploy: connect repo on Render → New Blueprint → select render.yaml
-# MongoDB: use MongoDB Atlas (Render does not include MongoDB on free tier).
+# Deploy: Render Dashboard → New Blueprint → select this repo
+# MongoDB: use MongoDB Atlas (create elva-support-prod database for production)
 
 services:
   - type: web
@@ -22,25 +22,65 @@ services:
         generateValue: true
       - key: CORS_ORIGIN
         sync: false
+      - key: FRONTEND_URL
+        sync: false
       - key: API_BASE_URL
         sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_FIRST_NAME
+        value: System
+      - key: ADMIN_LAST_NAME
+        value: Administrator
+      - key: NOTIFICATION_PROVIDER
+        value: SMTP
+      - key: NOTIFICATION_FALLBACK_ENABLED
+        value: "false"
+      - key: NOTIFICATION_WORKER_ENABLED
+        value: "true"
+      - key: EMAIL_SUPPORT_ADDRESS
+        value: support@elvatech.in
+      - key: SMTP_HOST
+        value: smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM_NAME
+        value: ELVA Support
+      - key: EMAIL_INBOUND_ENABLED
+        value: "true"
+      - key: EMAIL_IMAP_HOST
+        value: imap.gmail.com
+      - key: EMAIL_IMAP_PORT
+        value: "993"
+      - key: EMAIL_IMAP_SECURE
+        value: "true"
+      - key: EMAIL_IMAP_USER
+        sync: false
+      - key: EMAIL_IMAP_PASSWORD
+        sync: false
+      - key: EMAIL_IMAP_MAILBOX
+        value: support@elvatech.in
+      - key: EMAIL_IMAP_POLL_MS
+        value: "120000"
+      - key: EMAIL_IMAP_POLL_TIMEOUT_MS
+        value: "120000"
+      - key: EMAIL_IMAP_BATCH_SIZE
+        value: "10"
+      - key: EMAIL_IMAP_LOOKBACK_DAYS
+        value: "3"
       - key: LOG_OTP_TO_CONSOLE
         value: "false"
       - key: EXPOSE_OTP_IN_RESPONSE
         value: "false"
+      - key: LOG_VIEWER_ENABLED
+        value: "false"
       - key: GOOGLE_DRIVE_MOCK
         value: "true"
-      - key: NOTIFICATION_PROVIDER
-        value: ELVA_NOTIFY
-      - key: NOTIFICATION_FALLBACK_ENABLED
-        value: "true"
-      - key: ELVA_NOTIFY_API_URL
-        value: https://api.notify.elvatech.in
-      - key: ELVA_NOTIFY_APP_ID
-        sync: false
-      - key: ELVA_NOTIFY_API_KEY
-        sync: false
-      - key: ELVA_NOTIFY_BRAND_ID
-        sync: false
-      - key: ELVA_NOTIFY_OTP_MODE
-        value: native

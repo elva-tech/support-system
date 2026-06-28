@@ -1,10 +1,10 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
+import { isMerchantPortalApi } from '../../core/utils/api-path.util';
 import { MerchantAuthService } from '../services/merchant-auth.service';
 
 export const merchantSessionInterceptor: HttpInterceptorFn = (req, next) => {
-  const needsMerchantSession =
-    req.url.includes('/api/merchant') || req.url.includes('/api/attachments');
+  const needsMerchantSession = isMerchantPortalApi(req.url) || req.url.includes('/api/attachments');
 
   if (!needsMerchantSession) {
     return next(req);

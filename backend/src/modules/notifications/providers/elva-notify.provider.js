@@ -74,7 +74,28 @@ class ElvaNotifyProvider extends NotificationProvider {
       this._notifyBody({
         to: [payload.recipientEmail],
         subject: payload.subject,
-        html
+        html,
+        headers: payload.headers,
+        replyTo: payload.replyTo,
+        from: payload.from
+      })
+    );
+  }
+
+  async sendEmail(payload) {
+    if (!isElvaNotifyConfigured()) {
+      return { success: false, error: "ELVA Notify is not fully configured" };
+    }
+
+    return this._request(
+      "/notify",
+      this._notifyBody({
+        to: Array.isArray(payload.to) ? payload.to : [payload.to],
+        subject: payload.subject,
+        html: payload.html,
+        headers: payload.headers,
+        replyTo: payload.replyTo,
+        from: payload.from
       })
     );
   }
@@ -92,16 +113,28 @@ class ElvaNotifyProvider extends NotificationProvider {
     return this._withCredentials(body, { includeBrandId: true });
   }
 
-  _notifyBody({ to, subject, html }) {
-    return this._withCredentials(
-      {
-        channel: "EMAIL",
-        to,
-        subject,
-        html
-      },
-      { includeBrandId: false }
-    );
+  _notifyBody({ to, subject, html, headers, replyTo, from }) {
+    const body = {
+      channel: "EMAIL",
+      to,
+      subject,
+      html
+    };
+
+    if (from) {
+      body.from = from;
+      body.fromEmail = from;
+    }
+
+    if (headers && Object.keys(headers).length) {
+      body.headers = headers;
+    }
+
+    if (replyTo) {
+      body.replyTo = replyTo;
+    }
+
+    return this._withCredentials(body, { includeBrandId: false });
   }
 
   _withCredentials(body, { includeBrandId }) {

@@ -11,6 +11,8 @@ const { WORKER_NOTIFICATION_TYPES } = require("../../shared/constants/notificati
 const { createGoogleDriveService } = require("../../shared/services/google-drive/google-drive.service");
 const { CONVERSATION_TYPES, SENDER_TYPES } = require("../../shared/constants/conversation-types");
 const { ALL_TICKET_STATUSES, TICKET_STATUSES } = require("../../shared/constants/ticket-statuses");
+const { CONVERSATION_SOURCES } = require("../../shared/constants/communication-channels");
+const emailOutboundService = require("../email/email-outbound.service");
 const { mapAttachmentForClient } = require("../attachments/attachment.service");
 
 const driveService = createGoogleDriveService();
@@ -28,6 +30,7 @@ const buildInitialTimelineItem = (ticket) => {
     senderId: merchantId,
     senderName: merchantName,
     message: ticket.description,
+    source: ticket.source || CONVERSATION_SOURCES.PORTAL,
     createdAt: ticket.createdAt,
     isInitial: true,
     attachments: []
@@ -42,6 +45,8 @@ const mapConversation = (conversation, attachments = []) => ({
   senderId: conversation.senderId,
   senderName: conversation.senderName,
   message: conversation.message,
+  source: conversation.source || CONVERSATION_SOURCES.PORTAL,
+  channelMetadata: conversation.channelMetadata || {},
   createdAt: conversation.createdAt,
   attachments
 });
@@ -96,17 +101,37 @@ const getTimeline = async (ticketId, { includeInternalNotes = false } = {}) => {
   return { ticket, timeline: items };
 };
 
-const addReply = async (ticketId, { senderType, senderId, senderName, message }) => {
-  await ticketService.getById(ticketId);
+const addReply = async (
+  ticketId,
+  {
+    senderType,
+    senderId,
+    senderName,
+    message,
+    source = CONVERSATION_SOURCES.PORTAL,
+    channelMetadata = {},
+    externalMessageId = null,
+    skipOutboundEmail = false
+  }
+) => {
+  const ticket = await ticketService.getById(ticketId);
 
-  const conversation = await TicketConversation.create({
+  const conversationPayload = {
     ticketId,
     type: CONVERSATION_TYPES.MESSAGE,
     senderType,
     senderId,
     senderName,
-    message
-  });
+    message,
+    source,
+    channelMetadata
+  };
+
+  if (externalMessageId) {
+    conversationPayload.externalMessageId = externalMessageId;
+  }
+
+  const conversation = await TicketConversation.create(conversationPayload);
 
   await logAudit({
     entityType: ENTITY_TYPES.TICKET,
@@ -115,14 +140,35 @@ const addReply = async (ticketId, { senderType, senderId, senderName, message })
     actorType: senderType === SENDER_TYPES.MERCHANT ? ACTOR_TYPES.MERCHANT : ACTOR_TYPES.AGENT,
     actorId: senderId,
     actorName: senderName,
-    metadata: { conversationId: conversation._id.toString() }
+    metadata: { conversationId: conversation._id.toString(), source }
   });
 
   if (senderType === SENDER_TYPES.AGENT) {
     await notificationService.createEvent(WORKER_NOTIFICATION_TYPES.AGENT_REPLY, ticketId, {
       conversationId: conversation._id.toString(),
       message,
-      senderName
+      senderName,
+      source
+    });
+  }
+
+  if (
+    !skipOutboundEmail &&
+    source !== CONVERSATION_SOURCES.EMAIL &&
+    senderType !== SENDER_TYPES.MERCHANT
+  ) {
+    const merchant =
+      typeof ticket.merchantId === "object"
+        ? ticket.merchantId
+        : await require("../merchants/merchant-profile.model").findById(ticket.merchantId);
+
+    await emailOutboundService.sendTimelineEmail({
+      ticket,
+      merchant,
+      message,
+      senderName,
+      senderType,
+      conversationId: conversation._id
     });
   }
 

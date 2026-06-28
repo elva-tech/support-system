@@ -1,7 +1,7 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthApiService } from '../../../core/services/auth-api.service';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ElvaFooterComponent } from '../../../shared/components/elva-footer/elva-footer.component';
@@ -21,6 +21,12 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
             <h1 class="text-xl font-bold text-slate-900 sm:text-2xl">Staff Sign In</h1>
             <p class="mt-2 text-sm text-slate-500">Sign in with your admin, team lead, or agent credentials</p>
           </div>
+
+          @if (sessionExpired()) {
+            <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Your session ended. Please sign in again.
+            </div>
+          }
 
           @if (error()) {
             <div class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -61,18 +67,28 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
     </div>
   `
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly authApi = inject(AuthApiService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly loading = signal(false);
   readonly error = signal('');
+  readonly sessionExpired = signal(false);
 
   readonly form = this.fb.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', Validators.required]
   });
+
+  ngOnInit(): void {
+    const email = this.route.snapshot.queryParamMap.get('email');
+    if (email) {
+      this.form.patchValue({ email });
+    }
+    this.sessionExpired.set(this.route.snapshot.queryParamMap.get('session') === 'expired');
+  }
 
   onSubmit(): void {
     if (this.form.invalid) return;

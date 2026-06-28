@@ -1,9 +1,10 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { AuthService } from '../services/auth.service';
+import { isMerchantPortalApi } from '../utils/api-path.util';
 
 export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
-  if (req.url.includes('/api/merchant')) {
+  if (isMerchantPortalApi(req.url)) {
     return next(req);
   }
 

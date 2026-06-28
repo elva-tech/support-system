@@ -122,6 +122,20 @@ export const routes: Routes = [
         loadComponent: () => import('./features/teams/teams.component').then((m) => m.TeamsComponent)
       },
       {
+        path: 'merchants',
+        canActivate: [roleGuard('ADMIN')],
+        loadComponent: () =>
+          import('./features/merchants/merchants.component').then((m) => m.MerchantsComponent)
+      },
+      {
+        path: 'inbound-mail',
+        canActivate: [roleGuard('ADMIN')],
+        loadComponent: () =>
+          import('./features/inbound-mail/inbound-mail-queue.component').then(
+            (m) => m.InboundMailQueueComponent
+          )
+      },
+      {
         path: 'users',
         canActivate: [roleGuard('ADMIN')],
         loadComponent: () => import('./features/users/users.component').then((m) => m.UsersComponent)

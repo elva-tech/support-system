@@ -1,5 +1,9 @@
 const mongoose = require("mongoose");
 const { ALL_TICKET_STATUSES, TICKET_STATUSES } = require("../../shared/constants/ticket-statuses");
+const {
+  CONVERSATION_SOURCES,
+  ACTIVE_CONVERSATION_SOURCES
+} = require("../../shared/constants/communication-channels");
 
 const ticketSchema = new mongoose.Schema(
   {
@@ -49,6 +53,15 @@ const ticketSchema = new mongoose.Schema(
       type: String,
       enum: ALL_TICKET_STATUSES,
       default: TICKET_STATUSES.OPEN
+    },
+    source: {
+      type: String,
+      enum: [...ACTIVE_CONVERSATION_SOURCES, ...Object.values(CONVERSATION_SOURCES)],
+      default: CONVERSATION_SOURCES.PORTAL
+    },
+    channelMetadata: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
     },
     assignedTo: {
       type: mongoose.Schema.Types.ObjectId,

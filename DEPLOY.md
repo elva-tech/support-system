@@ -1,69 +1,120 @@
 # Deploying ELVA Support (Render + Vercel)
 
+Production targets:
+
+| Service | URL |
+|---------|-----|
+| Frontend | `https://support.elvatech.in` (Vercel) |
+| Backend API | `https://support-system-qhjr.onrender.com` |
+
 ## How frontend talks to backend
 
 Angular does **not** use a runtime `.env` file. API URL is set at **build time**:
 
-| Environment | Config file | API URL |
-|-------------|-------------|---------|
+| Environment | Config | API URL |
+|-------------|--------|---------|
 | Local dev (`ng serve`) | `frontend/src/environments/environment.ts` | `http://localhost:3000/api` |
-| Production build | `frontend/src/environments/environment.prod.ts` | Set via `API_URL` env var on Vercel |
-
-All HTTP services import `environment.apiUrl` (auth, tickets, merchant portal, etc.).
+| Production build | `API_URL` on Vercel → `write-environment.js` | `https://support-system-qhjr.onrender.com/api` |
 
 ```
-Browser (Vercel)  ──HTTPS──►  Render API (https://xxx.onrender.com/api/...)
+Browser (Vercel)  ──HTTPS──►  Render API (/api/...)
 ```
 
 ## 1. MongoDB Atlas
 
-Create a free cluster at [mongodb.com/atlas](https://www.mongodb.com/atlas). Copy the connection string (use standard `mongodb://` URI if `mongodb+srv` fails on your host).
+1. Create a cluster at [mongodb.com/atlas](https://www.mongodb.com/atlas).
+2. Create a **production** database (e.g. `elva-support-prod`) — do not use your local dev database.
+3. Copy the connection string and add it to Render as `MONGODB_URI`.
+4. Allow network access from anywhere (`0.0.0.0/0`) or Render's IP ranges.
 
 ## 2. Backend on Render
 
+### Option A — Blueprint (recommended)
+
 1. Push this repo to GitHub.
 2. [Render Dashboard](https://dashboard.render.com) → **New** → **Blueprint** → select repo (`render.yaml` is included).
-3. Or manually: **New Web Service** → connect repo → **Root Directory:** `backend` → **Build:** `npm install` → **Start:** `npm start`.
-4. Set environment variables:
+3. Fill in **sync: false** secrets when prompted (MongoDB, SMTP, IMAP, admin password, CORS).
 
-| Variable | Value |
-|----------|-------|
+### Option B — Manual web service
+
+- **Root Directory:** `backend`
+- **Build:** `npm install`
+- **Start:** `npm start`
+- **Health check:** `/health`
+
+### Required environment variables (Render)
+
+Copy from `backend/.env.example`. Set these in Render Dashboard → Environment:
+
+| Variable | Production value |
+|----------|------------------|
 | `NODE_ENV` | `production` |
-| `MONGODB_URI` | Atlas connection string |
-| `JWT_SECRET` | Long random string |
-| `INTERNAL_API_KEY` | Long random string |
-| `CORS_ORIGIN` | `https://YOUR-APP.vercel.app` |
-| `CORS_ALLOW_VERCEL_PREVIEWS` | `true` (optional, for Vercel preview URLs) |
-| `API_BASE_URL` | `https://YOUR-API.onrender.com` |
+| `MONGODB_URI` | Atlas URI for **prod** database |
+| `JWT_SECRET` | Long random string (Render can auto-generate) |
+| `INTERNAL_API_KEY` | Long random string (Render can auto-generate) |
+| `CORS_ORIGIN` | `https://support.elvatech.in` |
+| `FRONTEND_URL` | `https://support.elvatech.in` |
+| `API_BASE_URL` | `https://support-system-qhjr.onrender.com` |
+| `ADMIN_EMAIL` | Your admin login email |
+| `ADMIN_PASSWORD` | Strong password (admin user created on first start) |
+| `NOTIFICATION_PROVIDER` | `SMTP` |
+| `EMAIL_SUPPORT_ADDRESS` | `support@elvatech.in` |
+| `SMTP_HOST` | `smtp.gmail.com` |
+| `SMTP_PORT` | `587` |
+| `SMTP_USER` | Gmail account (e.g. `tech.elva@gmail.com`) |
+| `SMTP_PASS` | Gmail App Password |
+| `EMAIL_INBOUND_ENABLED` | `true` |
+| `EMAIL_IMAP_HOST` | `imap.gmail.com` |
+| `EMAIL_IMAP_USER` | Same Gmail account |
+| `EMAIL_IMAP_PASSWORD` | Same App Password |
+| `EMAIL_IMAP_MAILBOX` | `support@elvatech.in` |
 | `LOG_OTP_TO_CONSOLE` | `false` |
 | `EXPOSE_OTP_IN_RESPONSE` | `false` |
-| `ELVA_NOTIFY_APP_ID` | Your Notify app ID |
-| `ELVA_NOTIFY_API_KEY` | Your Notify API key |
-| `ELVA_NOTIFY_BRAND_ID` | Your brand ID |
+| `LOG_VIEWER_ENABLED` | `false` |
 
-5. After deploy, verify: `https://YOUR-API.onrender.com/health`
-6. Seed data (Render Shell): `npm run seed`
+Generate secrets locally:
 
-**Note:** Render free tier has ephemeral disk — uploaded attachments are lost on redeploy unless you configure Google Drive (`GOOGLE_DRIVE_MOCK=false`) or a Render persistent disk.
+```bash
+node -e "const c=require('crypto'); console.log('JWT_SECRET='+c.randomBytes(48).toString('hex')); console.log('INTERNAL_API_KEY='+c.randomBytes(32).toString('hex'));"
+```
+
+### After deploy
+
+1. Verify: `https://support-system-qhjr.onrender.com/health`
+2. Log in at the frontend with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+3. Create merchants and teams from the admin UI (no seed script — admin is bootstrapped automatically).
+
+### Gmail / support@ setup
+
+- SMTP login = Gmail account; **From** address = `support@elvatech.in` (configure "Send mail as" in Gmail).
+- IMAP polls the `support@elvatech.in` label/mailbox on the shared inbox.
+- Use a [Gmail App Password](https://myaccount.google.com/apppasswords), not your regular password.
+
+### Render free tier notes
+
+- Ephemeral disk — uploaded attachments are lost on redeploy unless you set `GOOGLE_DRIVE_MOCK=false` with Google Drive credentials.
+- Free services spin down after inactivity; first request may be slow.
 
 ## 3. Frontend on Vercel
 
 1. [Vercel Dashboard](https://vercel.com) → **Add New Project** → import repo.
 2. **Root Directory:** `frontend`
-3. **Framework Preset:** Other (or Angular if listed)
-4. **Build Command:** `npm run build` (default from `vercel.json`)
-5. **Output Directory:** `dist/frontend/browser`
-6. **Environment variable** (Production):
+3. **Build Command:** `npm run build` (from `vercel.json`)
+4. **Output Directory:** `dist/frontend/browser`
+5. **Environment variable** (Production):
 
 | Name | Value |
 |------|-------|
-| `API_URL` | `https://YOUR-API.onrender.com/api` |
+| `API_URL` | `https://support-system-qhjr.onrender.com/api` |
 
-7. Deploy. Open your Vercel URL — login and merchant OTP should hit the Render API.
+6. Add custom domain `support.elvatech.in` in Vercel → Domains.
+7. Deploy.
 
-## 4. Update CORS after first Vercel deploy
+## 4. Final CORS check
 
-Copy your live Vercel URL into Render `CORS_ORIGIN`. Redeploy the API if needed.
+Ensure Render `CORS_ORIGIN` includes your live frontend URL (`https://support.elvatech.in`). Redeploy the API if you change it.
+
+Optional: set `CORS_ALLOW_VERCEL_PREVIEWS=true` for Vercel preview deployments.
 
 ## Alternative: Docker (single host)
 
@@ -73,7 +124,19 @@ Copy your live Vercel URL into Render `CORS_ORIGIN`. Redeploy the API if needed.
 
 ```bash
 cd frontend
-set API_URL=https://your-api.onrender.com/api   # Windows
+set API_URL=https://support-system-qhjr.onrender.com/api   # Windows
 npm run build
 npx serve dist/frontend/browser -l 4200 -s
 ```
+
+## Troubleshooting
+
+| Error | Fix |
+|-------|-----|
+| `JWT_SECRET must not use the development default` | Set a new random `JWT_SECRET` on Render |
+| `INTERNAL_API_KEY must not use the development default` | Set a new random `INTERNAL_API_KEY` on Render |
+| `MONGODB_URI is required` | Add Atlas connection string |
+| `CORS_ORIGIN is required` | Set `https://support.elvatech.in` |
+| `SMTP email is not configured` | Set `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` |
+| OTP not arriving | Merchant must exist in prod DB; SMTP must be configured; check Render logs |
+| Login works locally but not on Vercel | Check `API_URL` ends with `/api` and CORS matches frontend domain |

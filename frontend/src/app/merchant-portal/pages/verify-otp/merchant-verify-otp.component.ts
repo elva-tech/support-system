@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MerchantApiService } from '../../services/merchant-api.service';
+import { formatApiError } from '../../../shared/utils/api-error.util';
 import { MerchantFlowService } from '../../services/merchant-flow.service';
 import { ElvaFooterComponent } from '../../../shared/components/elva-footer/elva-footer.component';
 import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva-header.component';
@@ -112,7 +113,7 @@ export class MerchantVerifyOtpComponent implements OnInit {
         this.router.navigate(['/merchant/dashboard']);
       },
       error: (err: HttpErrorResponse) => {
-        this.error.set(err.error?.message || 'Verification failed');
+        this.error.set(formatApiError(err, 'Verification failed. Please check the code and try again.'));
         this.loading.set(false);
       },
       complete: () => this.loading.set(false)

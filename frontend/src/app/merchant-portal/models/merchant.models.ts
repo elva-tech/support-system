@@ -29,7 +29,8 @@ export interface MerchantApiResponse<T> {
 }
 
 export interface RequestOtpResponse {
+  sent: boolean;
   message: string;
-  expiresInMinutes: number;
+  expiresInMinutes?: number;
   otp?: string;
 }

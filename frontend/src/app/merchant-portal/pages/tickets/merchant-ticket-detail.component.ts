@@ -21,6 +21,12 @@ import { TicketTimelineComponent } from '../../../shared/components/ticket-timel
         <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ error() }}</div>
       }
 
+      @if (successMessage()) {
+        <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          {{ successMessage() }}
+        </div>
+      }
+
       @if (ticket(); as t) {
         <div class="card space-y-4">
           <div class="flex flex-wrap items-start justify-between gap-4">
@@ -94,6 +100,7 @@ export class MerchantTicketDetailComponent implements OnInit {
   readonly sendingReply = signal(false);
   readonly uploading = signal(false);
   readonly selectedFile = signal<File | null>(null);
+  readonly successMessage = signal('');
 
   readonly replyForm = this.fb.nonNullable.group({
     message: ['', [Validators.required, Validators.maxLength(5000)]]
@@ -118,8 +125,16 @@ export class MerchantTicketDetailComponent implements OnInit {
 
   loadTimeline(): void {
     this.api.getTimeline(this.ticketId).subscribe({
-      next: (res) => this.timeline.set(res.data)
+      next: (res) => this.timeline.set(res.data),
+      error: (err: HttpErrorResponse) =>
+        this.error.set(err.error?.message || 'Failed to load conversation timeline')
     });
+  }
+
+  private flashSuccess(message: string): void {
+    this.successMessage.set(message);
+    this.error.set('');
+    setTimeout(() => this.successMessage.set(''), 4000);
   }
 
   sendReply(): void {
@@ -130,9 +145,11 @@ export class MerchantTicketDetailComponent implements OnInit {
         this.replyForm.reset();
         this.loadTimeline();
         this.sendingReply.set(false);
+        this.flashSuccess('Reply sent successfully.');
       },
       error: (err: HttpErrorResponse) => {
         this.error.set(err.error?.message || 'Failed to send reply');
+        this.successMessage.set('');
         this.sendingReply.set(false);
       }
     });
@@ -153,9 +170,11 @@ export class MerchantTicketDetailComponent implements OnInit {
         this.selectedFile.set(null);
         this.loadTimeline();
         this.uploading.set(false);
+        this.flashSuccess('Attachment uploaded successfully.');
       },
       error: (err: HttpErrorResponse) => {
         this.error.set(err.error?.message || 'Upload failed');
+        this.successMessage.set('');
         this.uploading.set(false);
       }
     });

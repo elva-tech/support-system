@@ -11,4 +11,9 @@ const getTeamWorkload = asyncHandler(async (req, res) => {
   res.json({ data: workload });
 });
 
-module.exports = { getAgentMetrics, getTeamWorkload };
+const getOmnichannelWidgets = asyncHandler(async (req, res) => {
+  const widgets = await dashboardService.getOmnichannelWidgets();
+  res.json({ data: widgets });
+});
+
+module.exports = { getAgentMetrics, getTeamWorkload, getOmnichannelWidgets };

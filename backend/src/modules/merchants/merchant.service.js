@@ -8,15 +8,22 @@ const { logAudit } = require("../audit/audit.service");
 const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/constants/audit-actions");
 const env = require("../../config/env");
 const { usesElvaNotifyNativeOtp } = require("../notifications/elva-notify.config");
+const onboardingEmail = require("../notifications/onboarding-email.service");
+const logger = require("../../shared/utils/logger");
 
 const OTP_EXPIRY_MS = env.otpExpiresMinutes * 60 * 1000;
-const OTP_REQUEST_MESSAGE = "If an account exists for this email, an OTP has been sent.";
 const OTP_VERIFY_FAILURE_MESSAGE = "Invalid email or OTP code";
 
-const otpSuccessResponse = () => ({
-  message: OTP_REQUEST_MESSAGE,
+const otpSentResponse = (extra = {}) => ({
+  sent: true,
+  message: "A verification code has been sent to your email. It may take a minute to arrive.",
   expiresInMinutes: env.otpExpiresMinutes,
-  ...(env.exposeOtpInResponse && {})
+  ...extra
+});
+
+const otpNotSentResponse = (message) => ({
+  sent: false,
+  message
 });
 
 const findActiveMerchantByEmail = async (email, { silent = false } = {}) => {
@@ -48,12 +55,17 @@ const requestOtp = async (email) => {
   });
 
   if (lockedSession) {
-    return otpSuccessResponse();
+    return otpNotSentResponse(
+      "Too many failed attempts. Please wait a few minutes before requesting a new code."
+    );
   }
 
   const merchant = await findActiveMerchantByEmail(normalizedEmail, { silent: true });
   if (!merchant) {
-    return otpSuccessResponse();
+    logger.info("OTP not sent — no active merchant profile for email", { email: normalizedEmail });
+    return otpNotSentResponse(
+      "No merchant account was found for this email. Please use your registered business email or contact support."
+    );
   }
 
   await OtpSession.deleteMany({ email: normalizedEmail, verified: false });
@@ -83,14 +95,24 @@ const requestOtp = async (email) => {
     expiresInMinutes: env.otpExpiresMinutes
   });
 
-  if (!delivery.success && !env.notifications.fallbackEnabled) {
-    throw new ApiError(503, "Unable to send OTP at this time. Please try again later.");
+  if (!delivery.success) {
+    await OtpSession.deleteMany({ email: normalizedEmail, verified: false });
+    logger.warn("OTP delivery failed", {
+      email: normalizedEmail,
+      provider: delivery.provider,
+      error: delivery.error
+    });
+    throw new ApiError(
+      503,
+      "We could not send the verification email right now. Please try again in a few minutes."
+    );
   }
 
-  return {
-    ...otpSuccessResponse(),
+  logger.info("OTP delivery accepted", { email: normalizedEmail, provider: delivery.provider });
+
+  return otpSentResponse({
     ...(env.exposeOtpInResponse && otp && { otp })
-  };
+  });
 };
 
 const verifyOtp = async (email, otpCode, sessionMeta = {}) => {
@@ -265,11 +287,109 @@ const syncMerchant = async (data) => {
   return merchant;
 };
 
+const merchantPopulate = [{ path: "applicationId", select: "name code" }];
+
+const listMerchants = async (filters = {}) => {
+  const query = {};
+
+  if (filters.applicationId) {
+    query.applicationId = filters.applicationId;
+  }
+
+  if (filters.search) {
+    query.$or = [
+      { email: { $regex: filters.search, $options: "i" } },
+      { merchantName: { $regex: filters.search, $options: "i" } }
+    ];
+  }
+
+  return MerchantProfile.find(query).populate(merchantPopulate).sort({ createdAt: -1 });
+};
+
+const buildExternalUserId = (email) => `portal-${email.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
+const createByAdmin = async ({ applicationId, email, merchantName, phone, isActive = true }) => {
+  const application = await Application.findById(applicationId);
+
+  if (!application || !application.isActive) {
+    throw new ApiError(400, "Invalid or inactive application");
+  }
+
+  const normalizedEmail = email.toLowerCase();
+  const existing = await MerchantProfile.findOne({ email: normalizedEmail });
+
+  if (existing) {
+    throw new ApiError(409, "A merchant with this email already exists");
+  }
+
+  const merchant = await syncMerchant({
+    applicationCode: application.code,
+    externalUserId: buildExternalUserId(normalizedEmail),
+    merchantName: merchantName?.trim() || normalizedEmail.split("@")[0],
+    email: normalizedEmail,
+    phone: phone || "",
+    isActive
+  });
+
+  await onboardingEmail.sendMerchantWelcomeEmail(merchant, application);
+
+  return merchant;
+};
+
+const updateByAdmin = async (id, data) => {
+  const merchant = await MerchantProfile.findById(id);
+
+  if (!merchant) {
+    throw new ApiError(404, "Merchant not found");
+  }
+
+  if (data.applicationId && data.applicationId !== merchant.applicationId.toString()) {
+    const application = await Application.findById(data.applicationId);
+
+    if (!application || !application.isActive) {
+      throw new ApiError(400, "Invalid or inactive application");
+    }
+
+    merchant.applicationId = application._id;
+    merchant.applicationCode = application.code;
+  }
+
+  if (data.email && data.email.toLowerCase() !== merchant.email) {
+    const normalizedEmail = data.email.toLowerCase();
+    const existing = await MerchantProfile.findOne({ email: normalizedEmail });
+
+    if (existing) {
+      throw new ApiError(409, "A merchant with this email already exists");
+    }
+
+    merchant.email = normalizedEmail;
+    merchant.externalUserId = buildExternalUserId(normalizedEmail);
+  }
+
+  if (data.merchantName !== undefined) {
+    merchant.merchantName = data.merchantName.trim();
+  }
+
+  if (data.phone !== undefined) {
+    merchant.phone = data.phone;
+  }
+
+  if (data.isActive !== undefined) {
+    merchant.isActive = data.isActive;
+  }
+
+  await merchant.save();
+  return MerchantProfile.findById(id).populate(merchantPopulate);
+};
+
 module.exports = {
   requestOtp,
   verifyOtp,
   getProfile,
   logout,
   validateSession,
-  syncMerchant
+  syncMerchant,
+  listMerchants,
+  createByAdmin,
+  updateByAdmin
 };

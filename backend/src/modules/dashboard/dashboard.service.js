@@ -1,10 +1,16 @@
 const Ticket = require("../tickets/ticket.model");
 const User = require("../users/user.model");
 const Team = require("../teams/team.model");
+const TicketConversation = require("../conversations/ticket-conversation.model");
+const NotificationDelivery = require("../notifications/notification-delivery.model");
+const NotificationEvent = require("../notifications/notification-event.model");
 const {
   TICKET_STATUSES,
   ACTIVE_TICKET_STATUSES
 } = require("../../shared/constants/ticket-statuses");
+const { CONVERSATION_SOURCES } = require("../../shared/constants/communication-channels");
+const { CONVERSATION_TYPES, SENDER_TYPES } = require("../../shared/constants/conversation-types");
+const { DELIVERY_STATUS } = require("../../shared/constants/notification-types");
 const { ROLES } = require("../../shared/constants/roles");
 const ApiError = require("../../shared/utils/ApiError");
 const resolveRefId = require("../../shared/utils/resolve-ref-id");
@@ -138,4 +144,63 @@ const getTeamWorkload = async (user, teamIdFilter) => {
   return workloads.sort((a, b) => b.ticketCount - a.ticketCount);
 };
 
-module.exports = { getAgentMetrics, getTeamWorkload };
+const getAverageFirstResponseTimeHours = async () => {
+  const tickets = await Ticket.find().select("_id createdAt").limit(500);
+  if (!tickets.length) {
+    return 0;
+  }
+
+  let totalMs = 0;
+  let counted = 0;
+
+  for (const ticket of tickets) {
+    const firstAgentReply = await TicketConversation.findOne({
+      ticketId: ticket._id,
+      type: CONVERSATION_TYPES.MESSAGE,
+      senderType: SENDER_TYPES.AGENT
+    })
+      .sort({ createdAt: 1 })
+      .select("createdAt");
+
+    if (!firstAgentReply) continue;
+
+    totalMs += new Date(firstAgentReply.createdAt) - new Date(ticket.createdAt);
+    counted += 1;
+  }
+
+  if (!counted) return 0;
+  return Math.round((totalMs / counted / (1000 * 60 * 60)) * 10) / 10;
+};
+
+const getOmnichannelWidgets = async () => {
+  const [
+    portalMessages,
+    emailMessages,
+    failedDeliveries,
+    pendingNotifications,
+    averageFirstResponseTime
+  ] = await Promise.all([
+    TicketConversation.countDocuments({
+      type: CONVERSATION_TYPES.MESSAGE,
+      source: CONVERSATION_SOURCES.PORTAL
+    }),
+    TicketConversation.countDocuments({
+      type: CONVERSATION_TYPES.MESSAGE,
+      source: CONVERSATION_SOURCES.EMAIL
+    }),
+    NotificationDelivery.countDocuments({ status: DELIVERY_STATUS.FAILED }),
+    NotificationEvent.countDocuments({ processed: false }),
+    getAverageFirstResponseTimeHours()
+  ]);
+
+  return {
+    portalMessages,
+    emailMessages,
+    failedDeliveries,
+    pendingNotifications,
+    averageFirstResponseTime,
+    reservedChannels: [CONVERSATION_SOURCES.WHATSAPP, CONVERSATION_SOURCES.SMS]
+  };
+};
+
+module.exports = { getAgentMetrics, getTeamWorkload, getOmnichannelWidgets };

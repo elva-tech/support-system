@@ -1,4 +1,5 @@
 const logger = require("../shared/utils/logger");
+const { isSmtpConfigured } = require("../modules/notifications/smtp.config");
 
 const DEV_DEFAULTS = {
   MONGODB_URI: "mongodb://localhost:27017/elva-support",
@@ -20,15 +21,36 @@ const validateEnvironment = () => {
     }
 
     if (process.env.JWT_SECRET === DEV_DEFAULTS.JWT_SECRET) {
-      errors.push("JWT_SECRET must not use the development default in production");
+      errors.push(
+        "JWT_SECRET must not use the development default in production — set a long random string in Render Environment (not the value from .env.example)"
+      );
     }
 
     if (process.env.INTERNAL_API_KEY === DEV_DEFAULTS.INTERNAL_API_KEY) {
-      errors.push("INTERNAL_API_KEY must not use the development default in production");
+      errors.push(
+        "INTERNAL_API_KEY must not use the development default in production — set a long random string in Render Environment (not the value from .env.example)"
+      );
     }
 
     if (process.env.EXPOSE_OTP_IN_RESPONSE === "true") {
       errors.push("EXPOSE_OTP_IN_RESPONSE must be false in production");
+    }
+
+    if (process.env.LOG_VIEWER_ENABLED === "true") {
+      errors.push("LOG_VIEWER_ENABLED must be false in production");
+    }
+
+    if (!process.env.FRONTEND_URL && !process.env.CORS_ORIGIN) {
+      errors.push("FRONTEND_URL or CORS_ORIGIN is required in production (for email links)");
+    }
+
+    if (process.env.EMAIL_INBOUND_ENABLED === "true") {
+      const imapKeys = ["EMAIL_IMAP_HOST", "EMAIL_IMAP_USER", "EMAIL_IMAP_PASSWORD"];
+      for (const key of imapKeys) {
+        if (!process.env[key]) {
+          errors.push(`${key} is required when EMAIL_INBOUND_ENABLED=true in production`);
+        }
+      }
     }
 
     if (process.env.NOTIFICATION_PROVIDER === "ELVA_NOTIFY") {
@@ -40,11 +62,15 @@ const validateEnvironment = () => {
       }
 
       if (
-        (process.env.ELVA_NOTIFY_OTP_MODE || "native") === "native" &&
+        (process.env.ELVA_NOTIFY_OTP_MODE || "relay") === "native" &&
         !process.env.ELVA_NOTIFY_BRAND_ID
       ) {
         errors.push("ELVA_NOTIFY_BRAND_ID is required for native OTP mode in production");
       }
+    } else if (!isSmtpConfigured()) {
+      errors.push(
+        "SMTP email is not configured in production — set SMTP_HOST, SMTP_USER, and SMTP_PASS (or EMAIL_IMAP_PASSWORD)"
+      );
     }
   } else {
     for (const [key, defaultValue] of Object.entries(DEV_DEFAULTS)) {

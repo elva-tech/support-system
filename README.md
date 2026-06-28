@@ -246,4 +246,103 @@ ELVA_NOTIFY_API_URL=https://notify.elva.example/api
 ELVA_NOTIFY_API_KEY=your-key
 ```
 
-See [backend/docs/NOTIFICATIONS.md](backend/docs/NOTIFICATIONS.md) for API contract and full configuration.
+## Phase 7A — Intelligent Classification Engine
+
+Backend-only classification before ticket processing (no email/IMAP/SMTP integration).
+
+### Engines
+
+| Engine | Role |
+|--------|------|
+| `ConversationEngine` | Normalizes sender, subject, body; extracts ticket references |
+| `ApplicationDetectionEngine` | Ticket ref, sender email, keyword application matching |
+| `ModuleDetectionEngine` | Module keyword matching within an application profile |
+| `ClassificationEngine` | Orchestrates detection in priority order |
+
+### Detection order
+
+1. Ticket reference (`APN-2026-000001`) → existing ticket
+2. Sender email → merchant application
+3. Subject keywords → application + module
+4. Body keywords → application + module
+5. Manual classification required
+
+### Collections
+
+- `application_profiles` — keywords and module keyword maps per application
+- `classification_queue` — low-confidence items needing manual review
+
+### APIs
+
+| Method | Endpoint | Role |
+|--------|----------|------|
+| POST | `/api/classification/classify` | Run classification on inbound conversation payload |
+| GET | `/api/classification/queue` | Needs Classification Queue (ADMIN, TEAM_LEAD) |
+| PATCH | `/api/classification/queue/:id/resolve` | Manual classification |
+| PATCH | `/api/classification/queue/:id/dismiss` | Dismiss queue item |
+| CRUD | `/api/classification/profiles` | Manage `application_profiles` (ADMIN write) |
+
+### Classify response
+
+```json
+{
+  "isExistingTicket": false,
+  "existingTicket": null,
+  "application": { "id", "code", "name" },
+  "module": { "id", "code", "name" },
+  "confidence": 0.82,
+  "matchedBy": "SUBJECT_KEYWORDS",
+  "requiresManualClassification": false,
+  "queueItemId": null
+}
+```
+
+Low-confidence results are auto-enqueued when `enqueue` is not `false`.
+
+## Phase 7B — Email Channel Integration
+
+Integrates `support@elvatech.in` with the omnichannel Conversation Engine. Timeline remains the single source of truth — email is only a transport channel.
+
+### Inbound (IMAP)
+
+1. Email worker polls mailbox when `EMAIL_INBOUND_ENABLED=true`
+2. Parsed messages pass through `OmnichannelConversationEngine`
+3. Ticket reference → append timeline (`source: EMAIL`)
+4. Else classification → create ticket or Needs Classification Queue
+5. Attachments use the existing attachment system (no duplicate storage)
+
+### Outbound (ELVA Notify)
+
+Every timeline `MESSAGE` sends threaded email with:
+
+- Subject tag: `[APN-2026-000123]`
+- Headers: `Message-ID`, `In-Reply-To`, `References`
+
+### APIs
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/omnichannel/inbound` | Internal API inbound (`source: API`) |
+| POST | `/api/omnichannel/email/poll` | Manual IMAP poll (ADMIN) |
+
+## Phase 7C — Omnichannel Communication Platform
+
+Channel-independent architecture preparing for WhatsApp and SMS (not implemented).
+
+### Conversation sources
+
+`PORTAL` · `EMAIL` · `API` · (`WHATSAPP`, `SMS` reserved)
+
+Every `TicketConversation` records `source` and `channelMetadata`.
+
+### Dashboard & Notification Center
+
+| Method | Endpoint |
+|--------|----------|
+| GET | `/api/dashboard/omnichannel` |
+| GET | `/api/notification-center/summary` |
+| GET | `/api/notification-center/deliveries` |
+| GET | `/api/notification-center/pending` |
+
+Widgets: Portal Messages, Email Messages, Failed Deliveries, Pending Notifications, Average First Response Time.
+

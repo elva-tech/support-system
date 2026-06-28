@@ -23,19 +23,21 @@ describe("ELVA Support Integration", () => {
   });
 
   describe("Merchant OTP", () => {
-    it("requests and verifies OTP without email enumeration", async () => {
+    it("requests and verifies OTP with explicit delivery status", async () => {
       const unknown = await request(app)
         .post("/api/merchant/request-otp")
         .send({ email: "unknown@test.com" });
 
       expect(unknown.status).toBe(200);
-      expect(unknown.body.message).toMatch(/If an account exists/i);
+      expect(unknown.body.sent).toBe(false);
+      expect(unknown.body.message).toMatch(/No merchant account/i);
 
       const otpRequest = await request(app)
         .post("/api/merchant/request-otp")
         .send({ email: "merchant@test.com" });
 
       expect(otpRequest.status).toBe(200);
+      expect(otpRequest.body.sent).toBe(true);
       expect(otpRequest.body.otp).toBeDefined();
 
       const verify = await request(app)

@@ -1,0 +1,9 @@
+const INBOUND_MAIL_QUEUE_STATUS = Object.freeze({
+  PENDING: "PENDING",
+  ASSIGNED: "ASSIGNED",
+  REJECTED: "REJECTED"
+});
+
+module.exports = {
+  INBOUND_MAIL_QUEUE_STATUS
+};

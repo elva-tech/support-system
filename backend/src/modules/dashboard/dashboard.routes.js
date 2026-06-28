@@ -14,5 +14,10 @@ router.get(
   authorize(ROLES.ADMIN, ROLES.TEAM_LEAD),
   dashboardController.getTeamWorkload
 );
+router.get(
+  "/omnichannel",
+  authorize(ROLES.ADMIN, ROLES.TEAM_LEAD),
+  dashboardController.getOmnichannelWidgets
+);
 
 module.exports = router;

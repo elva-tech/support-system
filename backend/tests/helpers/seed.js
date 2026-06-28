@@ -5,6 +5,7 @@ const User = require("../../src/modules/users/user.model");
 const MerchantProfile = require("../../src/modules/merchants/merchant-profile.model");
 const Ticket = require("../../src/modules/tickets/ticket.model");
 const Attachment = require("../../src/modules/attachments/attachment.model");
+const ApplicationProfile = require("../../src/modules/classification/application-profile.model");
 const merchantService = require("../../src/modules/merchants/merchant.service");
 const { ROLES } = require("../../src/shared/constants/roles");
 const { TICKET_STATUSES } = require("../../src/shared/constants/ticket-statuses");
@@ -92,6 +93,18 @@ const seedTestData = async () => {
     email: "merchant@test.com",
     phone: "+919999999999",
     isActive: true
+  });
+
+  await ApplicationProfile.create({
+    applicationId: application._id,
+    keywords: ["apnacart", "merchant", "order", "apn"],
+    modules: [
+      {
+        moduleId: moduleDoc._id,
+        keywords: ["order", "delivery", "shipment", "refund", "dispatch"]
+      }
+    ],
+    confidenceThreshold: 0.55
   });
 
   const ticketA = await Ticket.create({

@@ -1,12 +1,11 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { TeamService } from '../../core/services/team.service';
 import { ApplicationService } from '../../core/services/application.service';
-import { ModuleService } from '../../core/services/module.service';
 import { UserService } from '../../core/services/user.service';
-import { Application, ApplicationRef, AppModule, Team, User } from '../../core/models';
+import { Application, ApplicationRef, Team, User } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge.component';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog.component';
@@ -20,7 +19,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 class="text-2xl font-bold text-slate-900">Teams</h2>
-          <p class="text-sm text-slate-500">Support teams mapped to applications and modules</p>
+          <p class="text-sm text-slate-500">One team per application — all modules route through it automatically</p>
         </div>
         @if (isAdmin()) {
           <button type="button" class="btn-primary" (click)="openCreate()">Add Team</button>
@@ -74,6 +73,9 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
       <div class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4">
         <div class="my-8 w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl">
           <h3 class="text-lg font-semibold">{{ editingId() ? 'Edit Team' : 'New Team' }}</h3>
+          <p class="mt-1 text-sm text-slate-500">
+            Link a team to an application. Merchant tickets for any module on that application go to this team.
+          </p>
           <form [formGroup]="form" (ngSubmit)="save()" class="mt-4 space-y-4">
             <div class="grid gap-4 sm:grid-cols-2">
               <div class="sm:col-span-2">
@@ -82,7 +84,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
               </div>
               <div class="sm:col-span-2">
                 <label class="form-label">Application</label>
-                <select class="form-input" formControlName="applicationId" (change)="onAppChange()">
+                <select class="form-input" formControlName="applicationId">
                   <option value="">Select application</option>
                   @for (app of applications(); track app._id) {
                     <option [value]="app._id">{{ app.name }}</option>
@@ -93,27 +95,19 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
                 <label class="form-label">Description</label>
                 <textarea class="form-input" rows="2" formControlName="description"></textarea>
               </div>
-              <div>
+              <div class="sm:col-span-2">
                 <label class="form-label">Team Lead</label>
                 <select class="form-input" formControlName="teamLeadId">
                   <option value="">None</option>
-                  @for (user of users(); track user._id) {
+                  @for (user of staffUsers(); track user._id) {
                     <option [value]="user._id">{{ user.firstName }} {{ user.lastName }}</option>
-                  }
-                </select>
-              </div>
-              <div>
-                <label class="form-label">Modules</label>
-                <select class="form-input" formControlName="moduleIds" multiple size="4">
-                  @for (mod of filteredModules(); track mod._id) {
-                    <option [value]="mod._id">{{ mod.name }} ({{ mod.code }})</option>
                   }
                 </select>
               </div>
               <div class="sm:col-span-2">
                 <label class="form-label">Members</label>
                 <select class="form-input" formControlName="memberIds" multiple size="4">
-                  @for (user of users(); track user._id) {
+                  @for (user of staffUsers(); track user._id) {
                     <option [value]="user._id">{{ user.firstName }} {{ user.lastName }} — {{ user.role }}</option>
                   }
                 </select>
@@ -146,7 +140,6 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
 export class TeamsComponent implements OnInit {
   private readonly api = inject(TeamService);
   private readonly appApi = inject(ApplicationService);
-  private readonly modApi = inject(ModuleService);
   private readonly userApi = inject(UserService);
   private readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
@@ -154,9 +147,8 @@ export class TeamsComponent implements OnInit {
   readonly isAdmin = this.auth.isAdmin;
   readonly items = signal<Team[]>([]);
   readonly applications = signal<Application[]>([]);
-  readonly allModules = signal<AppModule[]>([]);
   readonly users = signal<User[]>([]);
-  readonly filteredModules = signal<AppModule[]>([]);
+  readonly staffUsers = computed(() => this.users().filter((user) => user.role !== 'ADMIN'));
   readonly error = signal('');
   readonly showForm = signal(false);
   readonly editingId = signal<string | null>(null);
@@ -168,14 +160,12 @@ export class TeamsComponent implements OnInit {
     applicationId: ['', Validators.required],
     description: [''],
     teamLeadId: [''],
-    moduleIds: [[] as string[]],
     memberIds: [[] as string[]],
     isActive: [true]
   });
 
   ngOnInit(): void {
     this.appApi.list().subscribe((res) => this.applications.set(res.data));
-    this.modApi.list().subscribe((res) => this.allModules.set(res.data));
     this.userApi.list().subscribe((res) => this.users.set(res.data));
     this.load();
   }
@@ -188,18 +178,8 @@ export class TeamsComponent implements OnInit {
   userLabel(ref: User | string | null | undefined): string {
     if (!ref) return '—';
     if (typeof ref === 'string') return ref;
+    if (ref.role === 'ADMIN') return '—';
     return `${ref.firstName} ${ref.lastName}`;
-  }
-
-  onAppChange(): void {
-    const appId = this.form.controls.applicationId.value;
-    this.filteredModules.set(
-      this.allModules().filter((m) => {
-        const id = typeof m.applicationId === 'string' ? m.applicationId : m.applicationId._id;
-        return id === appId;
-      })
-    );
-    this.form.patchValue({ moduleIds: [] });
   }
 
   load(): void {
@@ -216,23 +196,15 @@ export class TeamsComponent implements OnInit {
       applicationId: '',
       description: '',
       teamLeadId: '',
-      moduleIds: [],
       memberIds: [],
       isActive: true
     });
-    this.filteredModules.set([]);
     this.showForm.set(true);
   }
 
   openEdit(team: Team): void {
     this.editingId.set(team._id);
     const appId = typeof team.applicationId === 'string' ? team.applicationId : team.applicationId._id;
-    this.filteredModules.set(
-      this.allModules().filter((m) => {
-        const id = typeof m.applicationId === 'string' ? m.applicationId : m.applicationId._id;
-        return id === appId;
-      })
-    );
     this.form.patchValue({
       name: team.name,
       applicationId: appId,
@@ -240,10 +212,13 @@ export class TeamsComponent implements OnInit {
       teamLeadId: team.teamLeadId
         ? typeof team.teamLeadId === 'string'
           ? team.teamLeadId
-          : team.teamLeadId._id
+          : team.teamLeadId.role === 'ADMIN'
+            ? ''
+            : team.teamLeadId._id
         : '',
-      moduleIds: team.moduleIds.map((m) => (typeof m === 'string' ? m : m._id)),
-      memberIds: team.memberIds.map((m) => (typeof m === 'string' ? m : m._id)),
+      memberIds: team.memberIds
+        .filter((m) => (typeof m === 'string' ? true : m.role !== 'ADMIN'))
+        .map((m) => (typeof m === 'string' ? m : m._id)),
       isActive: team.isActive
     });
     this.showForm.set(true);
@@ -268,6 +243,7 @@ export class TeamsComponent implements OnInit {
       next: () => {
         this.saving.set(false);
         this.closeForm();
+        this.error.set('');
         this.load();
       },
       error: (err: HttpErrorResponse) => {

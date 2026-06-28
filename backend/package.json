@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node scripts/ensure-port-free.js 3000 && nodemon src/server.js",
-    "seed": "node src/scripts/seed.js",
+    "bootstrap:apnacart": "node src/scripts/bootstrap-apnacart.js",
     "test": "jest --runInBand --forceExit",
     "test:ci": "jest --runInBand --forceExit --coverage"
   },
@@ -21,10 +21,13 @@
     "express-rate-limit": "^7.5.0",
     "express-validator": "^7.2.0",
     "helmet": "^7.1.0",
+    "imapflow": "^1.4.2",
     "jsonwebtoken": "^9.0.2",
+    "mailparser": "^3.9.11",
     "mongoose": "^8.8.0",
     "morgan": "^1.10.0",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^9.0.1"
   },
   "optionalDependencies": {
     "googleapis": "^144.0.0"

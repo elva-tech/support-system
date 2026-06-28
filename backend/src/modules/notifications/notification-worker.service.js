@@ -12,6 +12,10 @@ const logger = require("../../shared/utils/logger");
 const WORKER_TYPE_LIST = Object.values(WORKER_NOTIFICATION_TYPES);
 
 const shouldSkipEvent = (event) => {
+  if (event.eventType === WORKER_NOTIFICATION_TYPES.AGENT_REPLY) {
+    return true;
+  }
+
   if (
     event.eventType === WORKER_NOTIFICATION_TYPES.STATUS_CHANGED &&
     event.metadata?.newStatus === TICKET_STATUSES.RESOLVED
@@ -38,6 +42,12 @@ const buildDeliveryPayload = async (event) => {
     [WORKER_NOTIFICATION_TYPES.TICKET_CREATED]: {
       subject: `Ticket ${ticketNumber} created`,
       body: `Your support ticket "${ticket.subject}" has been created.`
+    },
+    [WORKER_NOTIFICATION_TYPES.TICKET_ASSIGNED]: {
+      subject: `Agent assigned to ticket ${ticketNumber}`,
+      body: `Your ticket "${ticket.subject}" has been assigned to ${
+        event.metadata?.assignedToName || "a support agent"
+      }.`
     },
     [WORKER_NOTIFICATION_TYPES.AGENT_REPLY]: {
       subject: `New reply on ticket ${ticketNumber}`,
