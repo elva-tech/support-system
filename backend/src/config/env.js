@@ -113,14 +113,19 @@ module.exports = {
       family: parseInt(process.env.SMTP_FAMILY, 10) || 4
     },
     inboundEnabled: process.env.EMAIL_INBOUND_ENABLED === "true",
+    inboundProvider: (process.env.EMAIL_INBOUND_PROVIDER || "imap").toLowerCase(),
+    inboundWebhookSecret: process.env.EMAIL_INBOUND_WEBHOOK_SECRET || "",
     imap: {
       host: process.env.EMAIL_IMAP_HOST || "",
       port: parseInt(process.env.EMAIL_IMAP_PORT, 10) || 993,
       secure: process.env.EMAIL_IMAP_SECURE !== "false",
       user: process.env.EMAIL_IMAP_USER || "",
       password: process.env.EMAIL_IMAP_PASSWORD || "",
-      pollIntervalMs: parseInt(process.env.EMAIL_IMAP_POLL_MS, 10) || 60000,
-      pollTimeoutMs: parseInt(process.env.EMAIL_IMAP_POLL_TIMEOUT_MS, 10) || 120000,
+      pollIntervalMs: parseInt(process.env.EMAIL_IMAP_POLL_MS, 10) || 180000,
+      pollTimeoutMs: parseInt(process.env.EMAIL_IMAP_POLL_TIMEOUT_MS, 10) || 90000,
+      connectionTimeoutMs: parseInt(process.env.EMAIL_IMAP_CONNECTION_TIMEOUT_MS, 10) || 30000,
+      greetingTimeoutMs: parseInt(process.env.EMAIL_IMAP_GREETING_TIMEOUT_MS, 10) || 15000,
+      socketTimeoutMs: parseInt(process.env.EMAIL_IMAP_SOCKET_TIMEOUT_MS, 10) || 45000,
       batchSize: parseInt(process.env.EMAIL_IMAP_BATCH_SIZE, 10) || 25,
       lookbackDays: parseInt(process.env.EMAIL_IMAP_LOOKBACK_DAYS, 10) || 3,
       mailbox: process.env.EMAIL_IMAP_MAILBOX || process.env.EMAIL_SUPPORT_ADDRESS || ""

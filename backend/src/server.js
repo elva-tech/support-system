@@ -16,6 +16,7 @@ const { ensureAdminAccount } = require("./bootstrap/ensure-admin");
 const notificationWorker = require("./modules/notifications/notification-worker.service");
 const emailWorker = require("./modules/email/email-worker.service");
 const emailInboundService = require("./modules/email/email-inbound.service");
+const emailInboundWebhookService = require("./modules/email/email-inbound-webhook.service");
 const { isSmtpConfigured } = require("./modules/notifications/smtp.config");
 
 const start = async () => {
@@ -27,9 +28,21 @@ const start = async () => {
     notificationWorker.start();
     emailWorker.start();
 
-    if (!env.email.inboundEnabled || !emailInboundService.isConfigured()) {
+    if (!env.email.inboundEnabled) {
       logger.warn(
-        "Email reply sync is OFF — set EMAIL_INBOUND_ENABLED=true and EMAIL_IMAP_* for support@ replies to appear on tickets"
+        "Email reply sync is OFF — set EMAIL_INBOUND_ENABLED=true for support@ replies to appear on tickets"
+      );
+    } else if (env.email.inboundProvider === "webhook") {
+      if (emailInboundWebhookService.isConfigured()) {
+        logger.info("Email inbound via Cloudflare webhook — POST /api/webhooks/inbound-email");
+      } else {
+        logger.warn(
+          "EMAIL_INBOUND_PROVIDER=webhook but EMAIL_INBOUND_WEBHOOK_SECRET is missing — inbound email will be rejected"
+        );
+      }
+    } else if (!emailInboundService.isConfigured()) {
+      logger.warn(
+        "Email IMAP inbound enabled but not configured — set EMAIL_IMAP_HOST, EMAIL_IMAP_USER, EMAIL_IMAP_PASSWORD"
       );
     }
 

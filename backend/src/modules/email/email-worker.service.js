@@ -11,6 +11,13 @@ const start = () => {
     return;
   }
 
+  if (env.email.inboundProvider !== "imap") {
+    logger.info("Email IMAP worker skipped — inbound uses Cloudflare webhook", {
+      provider: env.email.inboundProvider
+    });
+    return;
+  }
+
   if (!emailInboundService.isConfigured()) {
     logger.warn("Email inbound enabled but IMAP is not fully configured");
     return;
@@ -20,9 +27,19 @@ const start = () => {
     return;
   }
 
+  const pollIntervalMs = env.email.imap.pollIntervalMs;
+  const pollTimeoutMs = env.email.imap.pollTimeoutMs;
+
+  if (pollIntervalMs <= pollTimeoutMs) {
+    logger.warn(
+      "EMAIL_IMAP_POLL_MS should be greater than EMAIL_IMAP_POLL_TIMEOUT_MS — overlapping polls cause IMAP errors",
+      { pollIntervalMs, pollTimeoutMs }
+    );
+  }
+
   logger.info("Email inbound worker started", {
-    pollIntervalMs: env.email.imap.pollIntervalMs,
-    pollTimeoutMs: env.email.imap.pollTimeoutMs,
+    pollIntervalMs,
+    pollTimeoutMs,
     mailbox: env.email.imap.mailbox || "INBOX"
   });
 
@@ -33,18 +50,23 @@ const start = () => {
     }
 
     pollInProgress = true;
-    const timeoutMs = env.email.imap.pollTimeoutMs;
+    const timeoutMs = pollTimeoutMs;
     let timeoutHandle;
+    let timedOut = false;
+
     const timeoutPromise = new Promise((_, reject) => {
-      timeoutHandle = setTimeout(
-        () => reject(new Error(`IMAP poll timed out after ${timeoutMs}ms`)),
-        timeoutMs
-      );
+      timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        reject(new Error(`IMAP poll timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
     });
 
     try {
       await Promise.race([emailInboundService.pollInbox(), timeoutPromise]);
     } catch (error) {
+      if (timedOut) {
+        await emailInboundService.forceCloseActiveClient();
+      }
       logger.error("Email inbound poll failed", { error: error.message, code: error.code });
     } finally {
       clearTimeout(timeoutHandle);
@@ -53,7 +75,7 @@ const start = () => {
   };
 
   run();
-  intervalHandle = setInterval(run, env.email.imap.pollIntervalMs);
+  intervalHandle = setInterval(run, pollIntervalMs);
 };
 
 const stop = () => {

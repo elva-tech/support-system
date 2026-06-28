@@ -46,6 +46,10 @@ services:
         value: support@elvatech.in
       - key: EMAIL_INBOUND_ENABLED
         value: "true"
+      - key: EMAIL_INBOUND_PROVIDER
+        value: webhook
+      - key: EMAIL_INBOUND_WEBHOOK_SECRET
+        sync: false
       - key: EMAIL_IMAP_HOST
         value: imap.gmail.com
       - key: EMAIL_IMAP_PORT

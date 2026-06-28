@@ -10,7 +10,7 @@ const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/const
 const { WORKER_NOTIFICATION_TYPES } = require("../../shared/constants/notification-types");
 const { createGoogleDriveService } = require("../../shared/services/google-drive/google-drive.service");
 const { CONVERSATION_TYPES, SENDER_TYPES } = require("../../shared/constants/conversation-types");
-const { ALL_TICKET_STATUSES, TICKET_STATUSES } = require("../../shared/constants/ticket-statuses");
+const { ALL_TICKET_STATUSES, TICKET_STATUSES, ACTIVE_TICKET_STATUSES } = require("../../shared/constants/ticket-statuses");
 const { CONVERSATION_SOURCES } = require("../../shared/constants/communication-channels");
 const emailOutboundService = require("../email/email-outbound.service");
 const { mapAttachmentForClient } = require("../attachments/attachment.service");
@@ -222,6 +222,7 @@ const updateStatus = async (ticketId, status, agent) => {
   }
 
   const previousStatus = ticket.status;
+  const previousAssignee = ticket.assignedTo;
   if (previousStatus === status) {
     return ticketService.getById(ticketId);
   }
@@ -255,6 +256,14 @@ const updateStatus = async (ticketId, status, agent) => {
       previousStatus,
       newStatus: status
     });
+  }
+
+  const becameInactive =
+    ACTIVE_TICKET_STATUSES.includes(previousStatus) && !ACTIVE_TICKET_STATUSES.includes(status);
+
+  if (becameInactive && previousAssignee) {
+    const { onAgentPotentiallyFreed } = require("../tickets/ticket-auto-assign.service");
+    await onAgentPotentiallyFreed(previousAssignee, ticket.teamId);
   }
 
   return ticketService.getById(ticketId);

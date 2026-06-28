@@ -61,10 +61,9 @@ Copy from `backend/.env.example`. Set these in Render Dashboard → Environment:
 | `RESEND_API_KEY` | From [resend.com](https://resend.com) (required when provider is RESEND) |
 | `EMAIL_SUPPORT_ADDRESS` | `support@elvatech.in` (must verify domain in Resend) |
 | `EMAIL_INBOUND_ENABLED` | `true` |
-| `EMAIL_IMAP_HOST` | `imap.gmail.com` |
-| `EMAIL_IMAP_USER` | Same Gmail account |
-| `EMAIL_IMAP_PASSWORD` | Same App Password |
-| `EMAIL_IMAP_MAILBOX` | `support@elvatech.in` |
+| `EMAIL_INBOUND_PROVIDER` | `webhook` (Cloudflare Email Worker — recommended) |
+| `EMAIL_INBOUND_WEBHOOK_SECRET` | Long random string — same value as Worker `INBOUND_WEBHOOK_SECRET` |
+| `EMAIL_IMAP_*` | Only if `EMAIL_INBOUND_PROVIDER=imap` (local dev); not needed for webhook |
 | `LOG_OTP_TO_CONSOLE` | `false` |
 | `EXPOSE_OTP_IN_RESPONSE` | `false` |
 | `LOG_VIEWER_ENABLED` | `false` |
@@ -96,9 +95,16 @@ node -e "const c=require('crypto'); console.log('JWT_SECRET='+c.randomBytes(48).
 3. On Render, set `NOTIFICATION_PROVIDER=RESEND` and `RESEND_API_KEY=re_...`.
 4. Redeploy. Emails send as `support@elvatech.in` once the domain is verified.
 
-**Inbound (merchant replies):** IMAP on port 993 is not blocked — keep `EMAIL_IMAP_*` for Gmail polling.
+**Inbound (merchant replies):** Use the **Cloudflare Email Worker** on `support@elvatech.in` only (see `cloudflare/support-inbound-email-worker/README.md`).
 
-- IMAP polls the `support@elvatech.in` label/mailbox on the shared inbox.
+- Worker forwards mail to `tech.elva@gmail.com` and POSTs to `POST /api/webhooks/inbound-email`.
+- On Render: `EMAIL_INBOUND_PROVIDER=webhook` and `EMAIL_INBOUND_WEBHOOK_SECRET` (must match Worker secret).
+- **Do not** change MX or routing for other `elvatech.in` aliases.
+- IMAP polling (`EMAIL_INBOUND_PROVIDER=imap`) remains available for local dev but is unreliable on Render.
+
+**Legacy IMAP (optional local dev):**
+
+- Set `EMAIL_INBOUND_PROVIDER=imap` and configure `EMAIL_IMAP_*`.
 - Use a [Gmail App Password](https://myaccount.google.com/apppasswords), not your regular password.
 
 ### Render free tier notes

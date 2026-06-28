@@ -46,6 +46,11 @@ const userSchema = new mongoose.Schema(
     isActive: {
       type: Boolean,
       default: true
+    },
+    /** When the agent last had zero active tickets — used for longest-idle auto-assign */
+    availableSince: {
+      type: Date,
+      default: Date.now
     }
   },
   {

@@ -79,7 +79,7 @@ const ticketSchema = new mongoose.Schema(
 ticketSchema.index({ merchantId: 1, createdAt: -1 });
 ticketSchema.index({ teamId: 1, status: 1 });
 ticketSchema.index({ applicationCode: 1, createdAt: -1 });
-ticketSchema.index({ assignedTo: 1, status: 1 });
+ticketSchema.index({ teamId: 1, assignedTo: 1, status: 1, createdAt: 1 });
 ticketSchema.index({ subject: "text" });
 
 module.exports = mongoose.model("Ticket", ticketSchema);

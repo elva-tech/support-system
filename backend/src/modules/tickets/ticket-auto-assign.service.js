@@ -7,7 +7,7 @@ const logger = require("../../shared/utils/logger");
 const { logAudit } = require("../audit/audit.service");
 const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/constants/audit-actions");
 const { ROLES } = require("../../shared/constants/roles");
-const { ACTIVE_TICKET_STATUSES } = require("../../shared/constants/ticket-statuses");
+const { TICKET_STATUSES, ACTIVE_TICKET_STATUSES } = require("../../shared/constants/ticket-statuses");
 const { renderTeamLeadAlertEmail } = require("../notifications/email-templates");
 
 const countActiveTicketsByAgent = async (agentIds) => {
@@ -28,12 +28,14 @@ const countActiveTicketsByAgent = async (agentIds) => {
   return new Map(rows.map((row) => [row._id.toString(), row.count]));
 };
 
+const getAgentIdleSince = (agent) => agent.availableSince || agent.createdAt || new Date(0);
+
 const pickAvailableAgent = async (teamId) => {
   const agents = await User.find({
     teamId,
     role: ROLES.AGENT,
     isActive: true
-  }).select("firstName lastName email");
+  }).select("firstName lastName email availableSince createdAt");
 
   if (!agents.length) {
     return { agent: null, reason: "no_agents" };
@@ -46,10 +48,62 @@ const pickAvailableAgent = async (teamId) => {
     return { agent: null, reason: "all_busy" };
   }
 
+  idleAgents.sort((a, b) => getAgentIdleSince(a) - getAgentIdleSince(b));
+
   return {
-    agent: idleAgents[Math.floor(Math.random() * idleAgents.length)],
+    agent: idleAgents[0],
     reason: null
   };
+};
+
+const refreshAgentAvailability = async (agentId) => {
+  if (!agentId) {
+    return;
+  }
+
+  const activeCount = await Ticket.countDocuments({
+    assignedTo: agentId,
+    status: { $in: ACTIVE_TICKET_STATUSES }
+  });
+
+  if (activeCount === 0) {
+    await User.findByIdAndUpdate(agentId, { $set: { availableSince: new Date() } });
+  }
+};
+
+const assignTicketToAgent = async (ticket, agent, { autoAssigned = false, fromQueue = false } = {}) => {
+  const conversationService = require("../conversations/conversation.service");
+
+  ticket.assignedTo = agent._id;
+  ticket.assignedAt = new Date();
+  await ticket.save();
+
+  const agentName = `${agent.firstName} ${agent.lastName}`;
+  const assignMessage = fromQueue
+    ? `Ticket auto-assigned from queue to ${agentName} (longest available agent)`
+    : autoAssigned
+      ? `Ticket auto-assigned to ${agentName}`
+      : `Ticket assigned to ${agentName}`;
+
+  await conversationService.addSystemEvent(ticket._id, assignMessage);
+
+  await logAudit({
+    entityType: ENTITY_TYPES.TICKET,
+    entityId: ticket._id,
+    action: AUDIT_ACTIONS.TICKET_ASSIGNED,
+    actorType: ACTOR_TYPES.SYSTEM,
+    actorName: autoAssigned ? "Auto-assign" : "System",
+    metadata: {
+      ticketNumber: ticket.ticketNumber,
+      assignedTo: agent._id.toString(),
+      assignedToName: agentName,
+      autoAssigned,
+      fromQueue
+    },
+    skipNotificationEvent: autoAssigned
+  });
+
+  return ticket;
 };
 
 const notifyTeamLeadUnassigned = async (ticket, team, reason) => {
@@ -70,8 +124,8 @@ const notifyTeamLeadUnassigned = async (ticket, team, reason) => {
   const ticketUrl = `${env.frontendUrl.replace(/\/$/, "")}/tickets/${ticket._id}`;
   const reasonLine =
     reason === "all_busy"
-      ? "All agents on your team currently have open tickets, so this ticket was not auto-assigned."
-      : "There are no active agents on your team, so this ticket was not auto-assigned.";
+      ? "All agents are currently busy — this ticket is in the queue and will auto-assign when an agent becomes available."
+      : "No agents are available — this ticket is awaiting team lead assignment.";
 
   const result = await notificationManager.sendEmail({
     to: lead.email,
@@ -80,7 +134,7 @@ const notifyTeamLeadUnassigned = async (ticket, team, reason) => {
       firstName: lead.firstName,
       ticketNumber: ticket.ticketNumber,
       subject: ticket.subject,
-      reasonLine: `${reasonLine} Please assign it to an agent or to yourself when you are ready.`,
+      reasonLine: `${reasonLine} You can also assign it manually at any time.`,
       ticketUrl
     })
   });
@@ -94,6 +148,45 @@ const notifyTeamLeadUnassigned = async (ticket, team, reason) => {
   }
 };
 
+const processQueuedTickets = async (teamId) => {
+  let assignedCount = 0;
+
+  while (true) {
+    const { agent } = await pickAvailableAgent(teamId);
+    if (!agent) {
+      break;
+    }
+
+    const queuedTicket = await Ticket.findOne({
+      teamId,
+      assignedTo: null,
+      status: TICKET_STATUSES.OPEN
+    }).sort({ createdAt: 1 });
+
+    if (!queuedTicket) {
+      break;
+    }
+
+    await assignTicketToAgent(queuedTicket, agent, { autoAssigned: true, fromQueue: true });
+    assignedCount += 1;
+  }
+
+  if (assignedCount > 0) {
+    logger.info("Queued tickets auto-assigned", { teamId: teamId.toString(), assignedCount });
+  }
+
+  return assignedCount;
+};
+
+const onAgentPotentiallyFreed = async (agentId, teamId) => {
+  if (!agentId || !teamId) {
+    return 0;
+  }
+
+  await refreshAgentAvailability(agentId);
+  return processQueuedTickets(teamId);
+};
+
 const autoAssignOnCreate = async (ticket) => {
   const conversationService = require("../conversations/conversation.service");
   const team = await Team.findById(ticket.teamId).select("teamLeadId name");
@@ -104,33 +197,13 @@ const autoAssignOnCreate = async (ticket) => {
   const { agent, reason } = await pickAvailableAgent(team._id);
 
   if (agent) {
-    ticket.assignedTo = agent._id;
-    ticket.assignedAt = new Date();
-    await ticket.save();
-
-    const agentName = `${agent.firstName} ${agent.lastName}`;
-    await conversationService.addSystemEvent(ticket._id, `Ticket auto-assigned to ${agentName}`);
-
-    await logAudit({
-      entityType: ENTITY_TYPES.TICKET,
-      entityId: ticket._id,
-      action: AUDIT_ACTIONS.TICKET_ASSIGNED,
-      actorType: ACTOR_TYPES.SYSTEM,
-      actorName: "Auto-assign",
-      metadata: {
-        ticketNumber: ticket.ticketNumber,
-        assignedTo: agent._id.toString(),
-        assignedToName: agentName,
-        autoAssigned: true
-      }
-    });
-
+    await assignTicketToAgent(ticket, agent, { autoAssigned: true });
     return ticket;
   }
 
   const queueMessage =
     reason === "all_busy"
-      ? "All agents are currently busy — awaiting team lead assignment."
+      ? "All agents are currently busy — ticket queued for auto-assignment when an agent becomes available."
       : "No agents available — awaiting team lead assignment.";
 
   await conversationService.addSystemEvent(ticket._id, queueMessage);
@@ -139,4 +212,10 @@ const autoAssignOnCreate = async (ticket) => {
   return ticket;
 };
 
-module.exports = { autoAssignOnCreate, pickAvailableAgent };
+module.exports = {
+  autoAssignOnCreate,
+  pickAvailableAgent,
+  processQueuedTickets,
+  onAgentPotentiallyFreed,
+  refreshAgentAvailability
+};

@@ -52,11 +52,23 @@ const validateEnvironment = () => {
     }
 
     if (process.env.EMAIL_INBOUND_ENABLED === "true") {
-      const imapKeys = ["EMAIL_IMAP_HOST", "EMAIL_IMAP_USER", "EMAIL_IMAP_PASSWORD"];
-      for (const key of imapKeys) {
-        if (!process.env[key]) {
-          errors.push(`${key} is required when EMAIL_INBOUND_ENABLED=true in production`);
+      const inboundProvider = (process.env.EMAIL_INBOUND_PROVIDER || "imap").toLowerCase();
+
+      if (inboundProvider === "webhook") {
+        if (!process.env.EMAIL_INBOUND_WEBHOOK_SECRET) {
+          errors.push(
+            "EMAIL_INBOUND_WEBHOOK_SECRET is required when EMAIL_INBOUND_PROVIDER=webhook in production"
+          );
         }
+      } else if (inboundProvider === "imap") {
+        const imapKeys = ["EMAIL_IMAP_HOST", "EMAIL_IMAP_USER", "EMAIL_IMAP_PASSWORD"];
+        for (const key of imapKeys) {
+          if (!process.env[key]) {
+            errors.push(`${key} is required when EMAIL_INBOUND_PROVIDER=imap in production`);
+          }
+        }
+      } else {
+        errors.push("EMAIL_INBOUND_PROVIDER must be imap or webhook");
       }
     }
 
@@ -74,9 +86,9 @@ const validateEnvironment = () => {
       ) {
         errors.push("ELVA_NOTIFY_BRAND_ID is required for native OTP mode in production");
       }
-    } else if (process.env.NOTIFICATION_PROVIDER === "RESEND") {
+    } else if (process.env.NOTIFICATION_PROVIDER === "RESEND" || isResendConfigured()) {
       if (!isResendConfigured()) {
-        errors.push("RESEND_API_KEY is required when NOTIFICATION_PROVIDER=RESEND in production");
+        errors.push("RESEND_API_KEY is required when using Resend for outbound email");
       }
     } else if (!isSmtpConfigured()) {
       errors.push(

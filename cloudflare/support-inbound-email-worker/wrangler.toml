@@ -1,0 +1,10 @@
+name = "elva-support-inbound"
+main = "src/index.js"
+compatibility_date = "2024-06-01"
+
+# Set secrets via: npx wrangler secret put INBOUND_WEBHOOK_SECRET
+# Set vars in dashboard or wrangler.toml [vars] below.
+
+[vars]
+WEBHOOK_URL = "https://support-system-qhjr.onrender.com/api/webhooks/inbound-email"
+GMAIL_FORWARD_ADDRESS = "tech.elva@gmail.com"

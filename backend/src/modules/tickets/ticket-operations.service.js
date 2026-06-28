@@ -75,6 +75,11 @@ const assignTicket = async (ticketId, userId, assigner) => {
     }
   });
 
+  if (previousAssignee && previousAssignee._id.toString() !== agent._id.toString()) {
+    const { onAgentPotentiallyFreed } = require("./ticket-auto-assign.service");
+    await onAgentPotentiallyFreed(previousAssignee._id, ticket.teamId);
+  }
+
   return ticketService.getById(ticketId);
 };
 

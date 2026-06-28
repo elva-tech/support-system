@@ -21,6 +21,7 @@ const classificationRoutes = require("./modules/classification/classification.ro
 const omnichannelRoutes = require("./modules/omnichannel/omnichannel.routes");
 const notificationCenterRoutes = require("./modules/notifications/notification-center.routes");
 const inboundMailQueueRoutes = require("./modules/inbound-mail-queue/inbound-mail-queue.routes");
+const inboundEmailWebhookRoutes = require("./modules/email/email-inbound-webhook.routes");
 
 const { logsViewerMiddleware } = require("./shared/http/logs-viewer");
 
@@ -56,6 +57,11 @@ app.use(
   })
 );
 app.use(morgan(env.isProduction ? "combined" : "dev"));
+app.use(
+  "/api/webhooks/inbound-email",
+  express.json({ limit: "15mb" }),
+  inboundEmailWebhookRoutes
+);
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/", logsViewerMiddleware);

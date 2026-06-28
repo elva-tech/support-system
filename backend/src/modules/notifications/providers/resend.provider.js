@@ -77,6 +77,10 @@ class ResendProvider extends NotificationProvider {
       reply_to: payload.replyTo || env.email.supportAddress
     };
 
+    if (payload.headers && Object.keys(payload.headers).length) {
+      body.headers = payload.headers;
+    }
+
     if (payload.text) {
       body.text = payload.text;
     }

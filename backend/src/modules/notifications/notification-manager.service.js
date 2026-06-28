@@ -18,11 +18,15 @@ class NotificationManager {
   }
 
   _emailProvider() {
-    if (env.notifications.provider === "RESEND") {
+    if (usesElvaNotifyNativeOtp() && env.notifications.provider === "ELVA_NOTIFY") {
+      return this.elvaNotifyProvider;
+    }
+
+    if (isResendConfigured()) {
       return this.resendProvider;
     }
 
-    if (env.notifications.provider === "ELVA_NOTIFY" && !isSmtpConfigured() && !isResendConfigured()) {
+    if (env.notifications.provider === "ELVA_NOTIFY") {
       return this.elvaNotifyProvider;
     }
 
@@ -30,11 +34,11 @@ class NotificationManager {
   }
 
   _emailProviderName() {
-    if (env.notifications.provider === "RESEND") {
+    if (isResendConfigured()) {
       return NOTIFICATION_PROVIDERS.RESEND;
     }
 
-    if (env.notifications.provider === "ELVA_NOTIFY" && !isSmtpConfigured() && !isResendConfigured()) {
+    if (env.notifications.provider === "ELVA_NOTIFY") {
       return NOTIFICATION_PROVIDERS.ELVA_NOTIFY;
     }
 
@@ -108,6 +112,7 @@ class NotificationManager {
 
     if (primaryResult.success) {
       await deliveryService.recordSuccess(providerName, event._id);
+      await this._recordOutboundEmailThread(payload);
       await this._markEventProcessed(event._id);
       return { success: true, provider: providerName };
     }
@@ -153,6 +158,7 @@ class NotificationManager {
 
     if (result.success) {
       await deliveryService.recordSuccess(providerName);
+      await this._recordOutboundEmailThread(payload);
       return { ...result, provider: providerName };
     }
 
@@ -220,6 +226,27 @@ class NotificationManager {
 
   async _markEventProcessed(eventId) {
     await NotificationEvent.findByIdAndUpdate(eventId, { processed: true });
+  }
+
+  async _recordOutboundEmailThread(payload) {
+    if (!payload?.emailThread) {
+      return;
+    }
+
+    const emailThreadService = require("../email/email-thread.service");
+    const { EMAIL_DIRECTION } = require("../../shared/constants/communication-channels");
+    const env = require("../../config/env");
+
+    try {
+      await emailThreadService.recordThreadMessage({
+        ...payload.emailThread,
+        direction: EMAIL_DIRECTION.OUTBOUND,
+        toEmail: payload.emailThread.toEmail || payload.to || payload.recipientEmail,
+        fromEmail: payload.emailThread.fromEmail || env.email.supportAddress
+      });
+    } catch (error) {
+      logger.warn("Failed to record outbound email thread", { error: error.message });
+    }
   }
 }
 

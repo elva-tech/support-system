@@ -2,6 +2,7 @@ const NotificationEvent = require("./notification-event.model");
 const Ticket = require("../tickets/ticket.model");
 require("../merchants/merchant-profile.model");
 const notificationManager = require("./notification-manager.service");
+const emailThreadService = require("../email/email-thread.service");
 const {
   WORKER_NOTIFICATION_TYPES
 } = require("../../shared/constants/notification-types");
@@ -12,6 +13,13 @@ const logger = require("../../shared/utils/logger");
 const WORKER_TYPE_LIST = Object.values(WORKER_NOTIFICATION_TYPES);
 
 const shouldSkipEvent = (event) => {
+  if (
+    event.eventType === WORKER_NOTIFICATION_TYPES.TICKET_ASSIGNED &&
+    event.metadata?.autoAssigned
+  ) {
+    return true;
+  }
+
   if (event.eventType === WORKER_NOTIFICATION_TYPES.AGENT_REPLY) {
     return true;
   }
@@ -38,49 +46,72 @@ const buildDeliveryPayload = async (event) => {
 
   const merchant = ticket.merchantId;
   const ticketNumber = ticket.ticketNumber;
-  const templates = {
-    [WORKER_NOTIFICATION_TYPES.TICKET_CREATED]: {
-      subject: `Ticket ${ticketNumber} created`,
-      body: `Your support ticket "${ticket.subject}" has been created.`
-    },
-    [WORKER_NOTIFICATION_TYPES.TICKET_ASSIGNED]: {
-      subject: `Agent assigned to ticket ${ticketNumber}`,
-      body: `Your ticket "${ticket.subject}" has been assigned to ${
-        event.metadata?.assignedToName || "a support agent"
-      }.`
-    },
-    [WORKER_NOTIFICATION_TYPES.AGENT_REPLY]: {
-      subject: `New reply on ticket ${ticketNumber}`,
-      body: event.metadata?.message || "An agent has replied to your ticket."
-    },
-    [WORKER_NOTIFICATION_TYPES.STATUS_CHANGED]: {
-      subject: `Ticket ${ticketNumber} status updated`,
-      body: `Your ticket status changed to ${event.metadata?.newStatus || ticket.status}.`
-    },
-    [WORKER_NOTIFICATION_TYPES.TICKET_RESOLVED]: {
-      subject: `Ticket ${ticketNumber} resolved`,
-      body: `Your support ticket "${ticket.subject}" has been resolved.`
-    }
-  };
+  const ticketTag = emailThreadService.formatTicketTag(ticketNumber);
+  const messageId = emailThreadService.generateMessageId(ticketNumber);
+  const threadContext = await emailThreadService.getThreadContext(ticket._id);
 
-  const template = templates[event.eventType] || {
-    subject: `Update on ticket ${ticketNumber}`,
-    body: `There is an update on your support ticket.`
-  };
-
-  return {
+  const withThread = (subject, body) => ({
     eventType: event.eventType,
     recipientEmail: merchant.email,
     recipientPhone: merchant.phone || null,
-    subject: template.subject,
-    body: template.body,
+    subject: subject.includes(ticketTag) ? subject : `${ticketTag} ${subject}`,
+    body,
+    headers: {
+      "Message-ID": messageId,
+      ...(threadContext.inReplyTo ? { "In-Reply-To": threadContext.inReplyTo } : {}),
+      ...(threadContext.references?.length
+        ? { References: threadContext.references.join(" ") }
+        : {})
+    },
+    replyTo: env.email.supportAddress,
+    from: env.email.supportAddress,
+    emailThread: {
+      ticketId: ticket._id,
+      conversationId: null,
+      messageId,
+      inReplyTo: threadContext.inReplyTo,
+      references: threadContext.references,
+      subject: subject.includes(ticketTag) ? subject : `${ticketTag} ${subject}`
+    },
     metadata: {
       ticketId: ticket._id.toString(),
       ticketNumber,
       merchantName: merchant.merchantName,
       ...event.metadata
     }
+  });
+
+  const templates = {
+    [WORKER_NOTIFICATION_TYPES.TICKET_CREATED]: withThread(
+      `Ticket ${ticketNumber} created`,
+      `Your support ticket "${ticket.subject}" has been created.`
+    ),
+    [WORKER_NOTIFICATION_TYPES.TICKET_ASSIGNED]: withThread(
+      `Agent assigned to ticket ${ticketNumber}`,
+      `Your ticket "${ticket.subject}" has been assigned to ${
+        event.metadata?.assignedToName || "a support agent"
+      }.`
+    ),
+    [WORKER_NOTIFICATION_TYPES.AGENT_REPLY]: withThread(
+      `New reply on ticket ${ticketNumber}`,
+      event.metadata?.message || "An agent has replied to your ticket."
+    ),
+    [WORKER_NOTIFICATION_TYPES.STATUS_CHANGED]: withThread(
+      `Ticket ${ticketNumber} status updated`,
+      `Your ticket status changed to ${event.metadata?.newStatus || ticket.status}.`
+    ),
+    [WORKER_NOTIFICATION_TYPES.TICKET_RESOLVED]: withThread(
+      `Ticket ${ticketNumber} resolved`,
+      `Your support ticket "${ticket.subject}" has been resolved.`
+    )
   };
+
+  const template = templates[event.eventType] || withThread(
+    `Update on ticket ${ticketNumber}`,
+    "There is an update on your support ticket."
+  );
+
+  return template;
 };
 
 const processBatch = async () => {

@@ -2,19 +2,14 @@ const { ImapFlow } = require("imapflow");
 const { simpleParser } = require("mailparser");
 const env = require("../../config/env");
 const logger = require("../../shared/utils/logger");
-const omnichannelEngine = require("../omnichannel/conversation-engine.service");
-const emailThreadService = require("./email-thread.service");
-const {
-  mapEmailAttachments,
-  extractReplyBody,
-  normalizeReferences,
-  isAddressedToSupport
-} = require("./email-content.util");
-const { CONVERSATION_SOURCES, EMAIL_DIRECTION } = require("../../shared/constants/communication-channels");
+const { processParsedEmail } = require("./email-inbound-processor.service");
+
+let activeClient = null;
 
 const isConfigured = () =>
   Boolean(
     env.email.inboundEnabled &&
+      env.email.inboundProvider === "imap" &&
       env.email.imap.host &&
       env.email.imap.user &&
       env.email.imap.password
@@ -32,8 +27,10 @@ const createImapClient = () => {
       pass: env.email.imap.password
     },
     logger: false,
-    socketTimeout: 300000,
-    greetingTimeout: 30000
+    connectionTimeout: env.email.imap.connectionTimeoutMs,
+    greetingTimeout: env.email.imap.greetingTimeoutMs,
+    socketTimeout: env.email.imap.socketTimeoutMs,
+    disableAutoIdle: true
   });
 
   client.on("error", (error) => {
@@ -43,8 +40,48 @@ const createImapClient = () => {
   return client;
 };
 
+const releaseClient = async (client) => {
+  try {
+    if (client && !client.closed) {
+      await client.logout();
+    }
+  } catch {
+    try {
+      client?.close();
+    } catch {
+      // ignore cleanup errors
+    }
+  } finally {
+    if (activeClient === client) {
+      activeClient = null;
+    }
+  }
+};
+
+const forceCloseActiveClient = async () => {
+  const client = activeClient;
+  if (!client) {
+    return;
+  }
+
+  logger.warn("[IMAP] Forcing close on stuck poll connection");
+  try {
+    client.close();
+  } catch {
+    // ignore
+  }
+
+  activeClient = null;
+};
+
 const resolveMailbox = async (client) => {
   const preferred = env.email.imap.mailbox || env.email.supportAddress;
+
+  // Gmail labels are unreliable as IMAP mailboxes — use INBOX + recipient filter.
+  if (isGmailHost()) {
+    return { path: "INBOX", isSupportMailbox: false };
+  }
+
   if (!preferred) {
     return { path: "INBOX", isSupportMailbox: false };
   }
@@ -69,73 +106,10 @@ const resolveMailbox = async (client) => {
   return { path: "INBOX", isSupportMailbox: false };
 };
 
-const buildSearchQuery = (since, { isSupportMailbox }) => {
-  if (isSupportMailbox) {
-    return { since };
-  }
-
-  if (isGmailHost() && env.email.supportAddress) {
-    return {
-      since,
-      labels: { has: [env.email.supportAddress] }
-    };
-  }
-
-  return { since };
-};
-
-const processParsedEmail = async (parsed, imapUid, { requireSupportRecipient }) => {
-  if (requireSupportRecipient && !isAddressedToSupport(parsed)) {
-    return { action: "SKIPPED", reason: "NOT_SUPPORT_ALIAS" };
-  }
-
-  const fromAddress = parsed.from?.value?.[0]?.address || "";
-  const senderName = parsed.from?.value?.[0]?.name || "";
-  const messageId = parsed.messageId || `<imap-${imapUid}@local>`;
-
-  if (await emailThreadService.findByMessageId(messageId)) {
-    return { status: "DUPLICATE", messageId };
-  }
-
-  const replyBody = extractReplyBody(parsed);
-  const attachments = mapEmailAttachments(parsed);
-  const references = normalizeReferences(parsed.references);
-  const inReplyTo = parsed.inReplyTo ? String(parsed.inReplyTo).trim() : null;
-
-  const result = await omnichannelEngine.processInbound({
-    source: CONVERSATION_SOURCES.EMAIL,
-    senderEmail: fromAddress,
-    senderName,
-    subject: parsed.subject || "(No subject)",
-    body:
-      replyBody ||
-      (attachments.length ? "Sent attachments via email" : parsed.subject || "(No message body)"),
-    attachments,
-    externalMessageId: messageId,
-    channelMetadata: {
-      messageId,
-      inReplyTo,
-      references,
-      imapUid
-    }
-  });
-
-  if (result.action === "REPLY" || result.action === "CREATED") {
-    await emailThreadService.recordThreadMessage({
-      ticketId: result.ticketId,
-      conversationId: result.conversationId || null,
-      messageId,
-      inReplyTo,
-      references,
-      direction: EMAIL_DIRECTION.INBOUND,
-      subject: parsed.subject || "",
-      fromEmail: fromAddress,
-      toEmail: env.email.supportAddress
-    });
-  }
-
-  return result;
-};
+const buildSearchQuery = (since) => ({
+  since,
+  unseen: true
+});
 
 const pollInbox = async () => {
   if (!isConfigured()) {
@@ -143,6 +117,7 @@ const pollInbox = async () => {
   }
 
   const client = createImapClient();
+  activeClient = client;
   let processed = 0;
   let synced = 0;
   let ignored = 0;
@@ -150,24 +125,14 @@ const pollInbox = async () => {
 
   try {
     await client.connect();
-    const { path: mailboxPath, isSupportMailbox } = await resolveMailbox(client);
+    const { path: mailboxPath } = await resolveMailbox(client);
     const lock = await client.getMailboxLock(mailboxPath);
 
     try {
       const since = new Date();
       since.setDate(since.getDate() - env.email.imap.lookbackDays);
 
-      let uids = [];
-      try {
-        uids = await client.search(buildSearchQuery(since, { isSupportMailbox }), { uid: true });
-      } catch (searchError) {
-        logger.warn("Gmail label search failed — retrying with date-only search", {
-          error: searchError.message,
-          mailbox: mailboxPath
-        });
-        uids = await client.search({ since }, { uid: true });
-      }
-
+      const uids = await client.search(buildSearchQuery(since), { uid: true });
       const batch = uids.sort((a, b) => b - a).slice(0, env.email.imap.batchSize);
 
       if (!batch.length) {
@@ -189,11 +154,12 @@ const pollInbox = async () => {
         try {
           const parsed = await simpleParser(message.source);
           const result = await processParsedEmail(parsed, message.uid, {
-            requireSupportRecipient: !isSupportMailbox
+            requireSupportRecipient: true
           });
 
           if (result.action === "SKIPPED" && result.reason === "NOT_SUPPORT_ALIAS") {
             skippedOtherAlias += 1;
+            await client.messageFlagsAdd(message.uid, ["\\Seen"]);
             continue;
           }
 
@@ -224,7 +190,7 @@ const pollInbox = async () => {
     logger.error("Email inbound poll failed", { error: error.message, code: error.code });
     throw error;
   } finally {
-    await client.logout().catch(() => {});
+    await releaseClient(client);
   }
 
   logger.info("Email inbox poll complete", {
@@ -238,4 +204,8 @@ const pollInbox = async () => {
   return { processed, synced, ignored, skippedOtherAlias, skipped: false };
 };
 
-module.exports = { isConfigured, pollInbox, processParsedEmail };
+module.exports = {
+  isConfigured,
+  pollInbox,
+  forceCloseActiveClient
+};
