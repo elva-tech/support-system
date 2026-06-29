@@ -27,7 +27,9 @@ const internalNote = asyncHandler(async (req, res) => {
 });
 
 const updateStatus = asyncHandler(async (req, res) => {
-  const ticket = await conversationService.updateStatus(req.params.id, req.body.status, req.user);
+  const ticket = await conversationService.updateStatus(req.params.id, req.body.status, req.user, {
+    closureNotes: req.body.closureNotes
+  });
   res.json({ message: "Status updated", data: ticket });
 });
 

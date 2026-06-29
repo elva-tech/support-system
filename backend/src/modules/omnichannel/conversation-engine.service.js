@@ -154,18 +154,8 @@ class OmnichannelConversationEngine {
       channelMetadata: normalized.channelMetadata
     });
 
-    if (normalized.externalMessageId) {
-      await TicketConversation.findOneAndUpdate(
-        { ticketId: ticket._id },
-        { externalMessageId: normalized.externalMessageId },
-        { sort: { createdAt: 1 } }
-      );
-    }
-
-    const firstConversation = await TicketConversation.findOne({ ticketId: ticket._id }).sort({
-      createdAt: 1
-    });
-    await this._attachFiles(ticket, firstConversation?._id, normalized.attachments, merchant);
+    // Initial merchant message lives on ticket.description (synthetic timeline item), not a conversation row.
+    await this._attachFiles(ticket, null, normalized.attachments, merchant);
 
     logger.info("Inbound message created new ticket", {
       ticketNumber: ticket.ticketNumber,

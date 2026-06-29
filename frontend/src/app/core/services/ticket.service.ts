@@ -67,8 +67,11 @@ export class TicketService {
     return this.http.post<ApiResponse<unknown>>(`${this.baseUrl}/${id}/internal-note`, { message });
   }
 
-  updateStatus(id: string, status: TicketStatus): Observable<ApiResponse<Ticket>> {
-    return this.http.patch<ApiResponse<Ticket>>(`${this.baseUrl}/${id}/status`, { status });
+  updateStatus(id: string, status: TicketStatus, closureNotes?: string): Observable<ApiResponse<Ticket>> {
+    return this.http.patch<ApiResponse<Ticket>>(`${this.baseUrl}/${id}/status`, {
+      status,
+      ...(closureNotes ? { closureNotes } : {})
+    });
   }
 
   transfer(id: string, teamId: string): Observable<ApiResponse<Ticket>> {

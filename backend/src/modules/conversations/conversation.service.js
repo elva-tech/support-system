@@ -17,7 +17,7 @@ const { mapAttachmentForClient } = require("../attachments/attachment.service");
 
 const driveService = createGoogleDriveService();
 
-const buildInitialTimelineItem = (ticket) => {
+const buildInitialTimelineItem = (ticket, attachments = []) => {
   const merchant = ticket.merchantId;
   const merchantName = typeof merchant === "object" ? merchant.merchantName : "Merchant";
   const merchantId = typeof merchant === "object" ? merchant._id : merchant;
@@ -33,9 +33,12 @@ const buildInitialTimelineItem = (ticket) => {
     source: ticket.source || CONVERSATION_SOURCES.PORTAL,
     createdAt: ticket.createdAt,
     isInitial: true,
-    attachments: []
+    attachments
   };
 };
+
+const isMerchantInitialAttachment = (attachment) =>
+  !attachment.conversationId && String(attachment.uploadedBy || "").startsWith("merchant:");
 
 const mapConversation = (conversation, attachments = []) => ({
   _id: conversation._id,
@@ -83,7 +86,11 @@ const getTimeline = async (ticketId, { includeInternalNotes = false } = {}) => {
     return acc;
   }, {});
 
-  const items = [buildInitialTimelineItem(ticket)];
+  const initialMerchantAttachments = attachments
+    .filter(isMerchantInitialAttachment)
+    .map(mapAttachmentForClient);
+
+  const items = [buildInitialTimelineItem(ticket, initialMerchantAttachments)];
 
   for (const conversation of conversations) {
     const key = conversation._id.toString();
@@ -91,7 +98,7 @@ const getTimeline = async (ticketId, { includeInternalNotes = false } = {}) => {
   }
 
   for (const attachment of attachments) {
-    if (!attachment.conversationId) {
+    if (!attachment.conversationId && !isMerchantInitialAttachment(attachment)) {
       items.push(mapAttachmentItem(attachment));
     }
   }
@@ -211,9 +218,16 @@ const addSystemEvent = async (ticketId, message) => {
   });
 };
 
-const updateStatus = async (ticketId, status, agent) => {
+const updateStatus = async (ticketId, status, agent, { closureNotes } = {}) => {
   if (!ALL_TICKET_STATUSES.includes(status)) {
     throw new ApiError(400, "Invalid ticket status");
+  }
+
+  if (status === TICKET_STATUSES.CLOSED) {
+    const notes = String(closureNotes || "").trim();
+    if (!notes) {
+      throw new ApiError(400, "Closure notes are required when closing a ticket");
+    }
   }
 
   const ticket = await Ticket.findById(ticketId);
@@ -228,13 +242,21 @@ const updateStatus = async (ticketId, status, agent) => {
   }
 
   ticket.status = status;
+  if (status === TICKET_STATUSES.CLOSED) {
+    ticket.closureNotes = String(closureNotes).trim();
+  }
   await ticket.save();
 
   const agentName = `${agent.firstName} ${agent.lastName}`;
-  await addSystemEvent(
-    ticketId,
-    `Status changed from ${previousStatus} to ${status} by ${agentName}`
-  );
+
+  if (status === TICKET_STATUSES.CLOSED) {
+    await addSystemEvent(
+      ticketId,
+      `Ticket closed by ${agentName}. Closure notes: ${String(closureNotes).trim()}`
+    );
+  } else {
+    await addSystemEvent(ticketId, `Status changed from ${previousStatus} to ${status} by ${agentName}`);
+  }
 
   await logAudit({
     entityType: ENTITY_TYPES.TICKET,
@@ -246,7 +268,8 @@ const updateStatus = async (ticketId, status, agent) => {
     metadata: {
       ticketNumber: ticket.ticketNumber,
       previousStatus,
-      newStatus: status
+      newStatus: status,
+      ...(status === TICKET_STATUSES.CLOSED ? { closureNotes: String(closureNotes).trim() } : {})
     }
   });
 

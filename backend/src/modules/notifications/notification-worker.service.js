@@ -8,18 +8,16 @@ const {
 } = require("../../shared/constants/notification-types");
 const { TICKET_STATUSES } = require("../../shared/constants/ticket-statuses");
 const env = require("../../config/env");
+const {
+  renderTicketCreatedEmail,
+  renderTicketAssignedEmail,
+  renderTicketClosedEmail
+} = require("./email-templates");
 const logger = require("../../shared/utils/logger");
 
 const WORKER_TYPE_LIST = Object.values(WORKER_NOTIFICATION_TYPES);
 
 const shouldSkipEvent = (event) => {
-  if (
-    event.eventType === WORKER_NOTIFICATION_TYPES.TICKET_ASSIGNED &&
-    event.metadata?.autoAssigned
-  ) {
-    return true;
-  }
-
   if (event.eventType === WORKER_NOTIFICATION_TYPES.AGENT_REPLY) {
     return true;
   }
@@ -35,10 +33,10 @@ const shouldSkipEvent = (event) => {
 };
 
 const buildDeliveryPayload = async (event) => {
-  const ticket = await Ticket.findById(event.entityId).populate(
-    "merchantId",
-    "email merchantName phone"
-  );
+  const ticket = await Ticket.findById(event.entityId).populate([
+    { path: "merchantId", select: "email merchantName phone" },
+    { path: "assignedTo", select: "firstName lastName" }
+  ]);
 
   if (!ticket || !ticket.merchantId) {
     throw new Error(`Ticket or merchant not found for event ${event._id}`);
@@ -50,12 +48,13 @@ const buildDeliveryPayload = async (event) => {
   const messageId = emailThreadService.generateMessageId(ticketNumber);
   const threadContext = await emailThreadService.getThreadContext(ticket._id);
 
-  const withThread = (subject, body) => ({
+  const withThread = (subject, body, { html } = {}) => ({
     eventType: event.eventType,
     recipientEmail: merchant.email,
     recipientPhone: merchant.phone || null,
     subject: subject.includes(ticketTag) ? subject : `${ticketTag} ${subject}`,
     body,
+    html,
     headers: {
       "Message-ID": messageId,
       ...(threadContext.inReplyTo ? { "In-Reply-To": threadContext.inReplyTo } : {}),
@@ -84,22 +83,58 @@ const buildDeliveryPayload = async (event) => {
   const templates = {
     [WORKER_NOTIFICATION_TYPES.TICKET_CREATED]: withThread(
       `Ticket ${ticketNumber} created`,
-      `Your support ticket "${ticket.subject}" has been created.`
+      `Your support ticket "${ticket.subject}" has been created.`,
+      {
+        html: renderTicketCreatedEmail({
+          ticketNumber,
+          subject: ticket.subject,
+          merchantName: merchant.merchantName,
+          message: ticket.description,
+          senderName: merchant.merchantName,
+          ticket
+        })
+      }
     ),
     [WORKER_NOTIFICATION_TYPES.TICKET_ASSIGNED]: withThread(
-      `Agent assigned to ticket ${ticketNumber}`,
+      `Ticket ${ticketNumber} assigned`,
       `Your ticket "${ticket.subject}" has been assigned to ${
         event.metadata?.assignedToName || "a support agent"
-      }.`
+      }.`,
+      {
+        html: renderTicketAssignedEmail({
+          ticketNumber,
+          subject: ticket.subject,
+          merchantName: merchant.merchantName,
+          agentName: event.metadata?.assignedToName || "our support team"
+        })
+      }
     ),
     [WORKER_NOTIFICATION_TYPES.AGENT_REPLY]: withThread(
       `New reply on ticket ${ticketNumber}`,
       event.metadata?.message || "An agent has replied to your ticket."
     ),
-    [WORKER_NOTIFICATION_TYPES.STATUS_CHANGED]: withThread(
-      `Ticket ${ticketNumber} status updated`,
-      `Your ticket status changed to ${event.metadata?.newStatus || ticket.status}.`
-    ),
+    [WORKER_NOTIFICATION_TYPES.STATUS_CHANGED]: (() => {
+      const newStatus = event.metadata?.newStatus || ticket.status;
+      if (newStatus === TICKET_STATUSES.CLOSED) {
+        return withThread(
+          `Ticket ${ticketNumber} closed`,
+          `Your support ticket "${ticket.subject}" has been closed.`,
+          {
+            html: renderTicketClosedEmail({
+              ticketNumber,
+              subject: ticket.subject,
+              merchantName: merchant.merchantName,
+              closureNotes: event.metadata?.closureNotes || ticket.closureNotes || null
+            })
+          }
+        );
+      }
+
+      return withThread(
+        `Ticket ${ticketNumber} status updated`,
+        `Your ticket status changed to ${newStatus}.`
+      );
+    })(),
     [WORKER_NOTIFICATION_TYPES.TICKET_RESOLVED]: withThread(
       `Ticket ${ticketNumber} resolved`,
       `Your support ticket "${ticket.subject}" has been resolved.`

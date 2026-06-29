@@ -119,6 +119,34 @@ import { TicketTimelineComponent } from '../../shared/components/ticket-timeline
               </select>
             </div>
 
+            @if (showCloseDialog()) {
+              <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+                <div class="card w-full max-w-lg space-y-4 shadow-xl">
+                  <h3 class="text-lg font-semibold text-slate-900">Close ticket</h3>
+                  <p class="text-sm text-slate-600">
+                    Add closure notes before closing this ticket. The merchant will receive these notes in the closure email.
+                  </p>
+                  <form [formGroup]="closeForm" (ngSubmit)="confirmClose()" class="space-y-4">
+                    <textarea
+                      class="form-input"
+                      rows="5"
+                      formControlName="closureNotes"
+                      placeholder="Describe how the issue was resolved or why the ticket is being closed..."
+                    ></textarea>
+                    @if (closeForm.controls.closureNotes.touched && closeForm.controls.closureNotes.invalid) {
+                      <p class="text-sm text-red-600">Closure notes are required.</p>
+                    }
+                    <div class="flex justify-end gap-3">
+                      <button type="button" class="btn-secondary" (click)="cancelClose()">Cancel</button>
+                      <button type="submit" class="btn-primary" [disabled]="closeForm.invalid || closingTicket()">
+                        {{ closingTicket() ? 'Closing...' : 'Close ticket' }}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            }
+
             <div class="card space-y-4">
               <h3 class="text-lg font-semibold text-slate-900">Transfer Team</h3>
               <select class="form-input" [value]="currentTeamId(t)" (change)="onTransfer($event)">
@@ -173,6 +201,8 @@ export class TicketDetailComponent implements OnInit {
   readonly sendingNote = signal(false);
   readonly uploading = signal(false);
   readonly selectedFile = signal<File | null>(null);
+  readonly showCloseDialog = signal(false);
+  readonly closingTicket = signal(false);
 
   readonly replyForm = this.fb.nonNullable.group({
     message: ['', [Validators.required, Validators.maxLength(5000)]]
@@ -180,6 +210,10 @@ export class TicketDetailComponent implements OnInit {
 
   readonly noteForm = this.fb.nonNullable.group({
     message: ['', [Validators.required, Validators.maxLength(5000)]]
+  });
+
+  readonly closeForm = this.fb.nonNullable.group({
+    closureNotes: ['', [Validators.required, Validators.maxLength(5000)]]
   });
 
   private ticketId = '';
@@ -249,7 +283,52 @@ export class TicketDetailComponent implements OnInit {
   }
 
   onStatusChange(event: Event): void {
-    const status = (event.target as HTMLSelectElement).value as TicketStatus;
+    const select = event.target as HTMLSelectElement;
+    const status = select.value as TicketStatus;
+    const current = this.ticket()?.status;
+
+    if (status === 'CLOSED') {
+      if (current) {
+        select.value = current;
+      }
+      this.closeForm.reset();
+      this.showCloseDialog.set(true);
+      return;
+    }
+
+    this.applyStatus(status);
+  }
+
+  confirmClose(): void {
+    if (this.closeForm.invalid) {
+      this.closeForm.markAllAsTouched();
+      return;
+    }
+
+    this.closingTicket.set(true);
+    this.api
+      .updateStatus(this.ticketId, 'CLOSED', this.closeForm.controls.closureNotes.value)
+      .subscribe({
+        next: (res) => {
+          this.ticket.set(res.data);
+          this.showCloseDialog.set(false);
+          this.closeForm.reset();
+          this.loadTimeline();
+          this.closingTicket.set(false);
+        },
+        error: (err: HttpErrorResponse) => {
+          this.error.set(err.error?.message || 'Failed to close ticket');
+          this.closingTicket.set(false);
+        }
+      });
+  }
+
+  cancelClose(): void {
+    this.showCloseDialog.set(false);
+    this.closeForm.reset();
+  }
+
+  private applyStatus(status: TicketStatus): void {
     this.api.updateStatus(this.ticketId, status).subscribe({
       next: (res) => {
         this.ticket.set(res.data);

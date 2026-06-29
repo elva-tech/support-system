@@ -3,7 +3,7 @@ const { EMAIL_DIRECTION } = require("../../shared/constants/communication-channe
 const emailThreadService = require("./email-thread.service");
 const env = require("../../config/env");
 const logger = require("../../shared/utils/logger");
-const { renderTicketReplyEmail } = require("../notifications/email-templates");
+const { renderTicketReplyEmail, renderTicketCreatedEmail } = require("../notifications/email-templates");
 
 const sendTimelineEmail = async ({
   ticket,
@@ -26,12 +26,21 @@ const sendTimelineEmail = async ({
     ? `${emailThreadService.formatTicketTag(ticketNumber)} ${ticket.subject}`
     : emailThreadService.buildThreadedSubject(ticketNumber, ticket.subject);
 
-  const html = renderTicketReplyEmail({
-    senderName,
-    senderType,
-    message,
-    ticketNumber
-  });
+  const html = isNewTicket
+    ? renderTicketCreatedEmail({
+        ticketNumber,
+        subject: ticket.subject,
+        merchantName: merchant.merchantName,
+        message,
+        senderName,
+        ticket
+      })
+    : renderTicketReplyEmail({
+        senderName,
+        senderType,
+        message,
+        ticketNumber
+      });
 
   const headers = {
     "Message-ID": messageId,

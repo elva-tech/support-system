@@ -63,6 +63,12 @@ const ticketSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {}
     },
+    closureNotes: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: 5000
+    },
     assignedTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

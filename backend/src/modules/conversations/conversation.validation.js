@@ -1,5 +1,5 @@
 const { body, param } = require("express-validator");
-const { ALL_TICKET_STATUSES } = require("../../shared/constants/ticket-statuses");
+const { ALL_TICKET_STATUSES, TICKET_STATUSES } = require("../../shared/constants/ticket-statuses");
 
 const replyValidation = [
   param("id").isMongoId().withMessage("Invalid ticket id"),
@@ -13,7 +13,13 @@ const internalNoteValidation = [
 
 const statusValidation = [
   param("id").isMongoId().withMessage("Invalid ticket id"),
-  body("status").isIn(ALL_TICKET_STATUSES).withMessage(`Status must be one of: ${ALL_TICKET_STATUSES.join(", ")}`)
+  body("status").isIn(ALL_TICKET_STATUSES).withMessage(`Status must be one of: ${ALL_TICKET_STATUSES.join(", ")}`),
+  body("closureNotes")
+    .if(body("status").equals(TICKET_STATUSES.CLOSED))
+    .trim()
+    .notEmpty()
+    .withMessage("Closure notes are required when closing a ticket")
+    .isLength({ max: 5000 })
 ];
 
 const transferValidation = [

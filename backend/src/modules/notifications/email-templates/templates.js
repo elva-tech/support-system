@@ -35,6 +35,70 @@ const renderNotificationEmail = ({ subject, body, merchantName }) =>
     `
   });
 
+const buildTicketAssignmentHtml = (ticket) => {
+  const agent = ticket?.assignedTo;
+  if (agent && typeof agent === "object") {
+    const agentName = `${agent.firstName || ""} ${agent.lastName || ""}`.trim();
+    if (agentName) {
+      return `Your ticket has been assigned to <strong>${escapeHtml(agentName)}</strong>.`;
+    }
+  }
+
+  return "Currently all our agents are busy. But don't worry — your ticket is in the team lead queue and will be assigned soon.";
+};
+
+const renderTicketAssignedEmail = ({ ticketNumber, subject, merchantName, agentName }) =>
+  renderEmailLayout({
+    heroTitle: "Ticket assigned",
+    heroSubtitle: ticketNumber,
+    preheader: `Ticket ${ticketNumber} assigned to ${agentName}`,
+    bodyHtml: `
+      ${renderParagraph(`Dear ${escapeHtml(merchantName || "Customer")},`)}
+      ${renderParagraph(`Your support ticket <strong>${escapeHtml(ticketNumber)}</strong> — "<em>${escapeHtml(subject)}</em>" — has been assigned to <strong>${escapeHtml(agentName)}</strong>.`)}
+      ${renderParagraph("Our support agent will review your request and respond on this email thread.")}
+      ${renderParagraph(`<span style="font-size:13px;color:${MUTED};">Reply to this email to add more information to ticket <strong>${escapeHtml(ticketNumber)}</strong>.</span>`)}
+    `
+  });
+
+const renderTicketCreatedEmail = ({
+  ticketNumber,
+  subject,
+  merchantName,
+  message,
+  senderName,
+  ticket
+}) =>
+  renderEmailLayout({
+    heroTitle: "Ticket created",
+    heroSubtitle: ticketNumber,
+    preheader: `Your support ticket ${ticketNumber} has been created`,
+    bodyHtml: `
+      ${renderParagraph(`Dear ${escapeHtml(merchantName || "Customer")},`)}
+      ${renderParagraph(`Your support ticket <strong>${escapeHtml(ticketNumber)}</strong> has been created for "<em>${escapeHtml(subject)}</em>".`)}
+      ${renderParagraph(buildTicketAssignmentHtml(ticket))}
+      ${renderParagraph(`<strong>${escapeHtml(senderName)}</strong> wrote:`)}
+      ${renderInfoBox(nl2br(message))}
+      ${renderParagraph(`<span style="font-size:13px;color:${MUTED};">Reply to this email to add more information to ticket <strong>${escapeHtml(ticketNumber)}</strong>.</span>`)}
+    `
+  });
+
+const renderTicketClosedEmail = ({ ticketNumber, subject, merchantName, closureNotes }) =>
+  renderEmailLayout({
+    heroTitle: "Ticket closed",
+    heroSubtitle: ticketNumber,
+    preheader: `Ticket ${ticketNumber} has been closed`,
+    bodyHtml: `
+      ${renderParagraph(`Dear ${escapeHtml(merchantName || "Customer")},`)}
+      ${renderParagraph(`Your support ticket <strong>${escapeHtml(ticketNumber)}</strong> — "<em>${escapeHtml(subject)}</em>" — is now <strong>closed</strong>.`)}
+      ${
+        closureNotes
+          ? `${renderParagraph("<strong>Closure notes</strong>")}${renderInfoBox(nl2br(closureNotes))}`
+          : ""
+      }
+      ${renderParagraph("If you still need help or would like to reopen this ticket, simply reply to this email and we will continue the conversation.")}
+    `
+  });
+
 const renderTicketReplyEmail = ({ senderName, senderType, message, ticketNumber }) =>
   renderEmailLayout({
     heroTitle: `Update on ticket ${ticketNumber}`,
@@ -158,6 +222,10 @@ const renderTeamLeadAlertEmail = ({ firstName, ticketNumber, subject, reasonLine
 module.exports = {
   renderOtpEmail,
   renderNotificationEmail,
+  buildTicketAssignmentHtml,
+  renderTicketCreatedEmail,
+  renderTicketAssignedEmail,
+  renderTicketClosedEmail,
   renderTicketReplyEmail,
   renderStaffWelcomeEmail,
   renderStaffPasswordUpdatedEmail,

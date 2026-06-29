@@ -3,6 +3,7 @@ const app = require("../../src/app");
 const { seedTestData, loginAgent } = require("../helpers/seed");
 const Ticket = require("../../src/modules/tickets/ticket.model");
 const TicketConversation = require("../../src/modules/conversations/ticket-conversation.model");
+const Attachment = require("../../src/modules/attachments/attachment.model");
 const env = require("../../src/config/env");
 
 describe("Omnichannel & Email Integration", () => {
@@ -32,11 +33,52 @@ describe("Omnichannel & Email Integration", () => {
       ticketId: response.body.data.ticketId,
       type: "SYSTEM"
     });
-    expect(conversation?.message).toMatch(/auto-assigned/i);
+    expect(conversation?.message).toMatch(/assigned to/i);
 
     const ticket = await Ticket.findById(response.body.data.ticketId);
     expect(ticket.source).toBe("API");
     expect(ticket.assignedTo).toBeTruthy();
+  });
+
+  it("places new-ticket email attachments on the merchant message, not system events", async () => {
+    const response = await request(app)
+      .post("/api/omnichannel/inbound")
+      .set("X-Internal-Api-Key", env.internalApiKey)
+      .send({
+        source: "EMAIL",
+        senderEmail: "merchant@test.com",
+        subject: "Order issue with screenshot",
+        body: "See attached screenshot"
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.action).toBe("CREATED");
+
+    const ticketId = response.body.data.ticketId;
+
+    await Attachment.create({
+      ticketId,
+      conversationId: null,
+      fileName: "proof.png",
+      mimeType: "image/png",
+      fileSize: 1024,
+      driveFileId: "mock-proof",
+      driveUrl: "https://example.com/proof.png",
+      uploadedBy: "merchant:Test Merchant",
+      uploadedAt: new Date()
+    });
+
+    const timeline = await request(app)
+      .get(`/api/tickets/${ticketId}/timeline`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    expect(timeline.status).toBe(200);
+    const initial = timeline.body.data.find((item) => item.isInitial);
+    const systemItem = timeline.body.data.find((item) => item.senderType === "SYSTEM");
+
+    expect(initial?.attachments?.length).toBe(1);
+    expect(initial.attachments[0].fileName).toBe("proof.png");
+    expect(systemItem?.attachments?.length || 0).toBe(0);
   });
 
   it("appends inbound message to existing ticket by reference", async () => {

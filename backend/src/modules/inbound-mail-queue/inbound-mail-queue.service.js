@@ -12,7 +12,7 @@ const Attachment = require("../attachments/attachment.model");
 const TicketConversation = require("../conversations/ticket-conversation.model");
 const { INBOUND_MAIL_QUEUE_STATUS } = require("../../shared/constants/inbound-mail-queue");
 const { CONVERSATION_SOURCES } = require("../../shared/constants/communication-channels");
-const { SENDER_TYPES } = require("../../shared/constants/conversation-types");
+const { SENDER_TYPES, CONVERSATION_TYPES } = require("../../shared/constants/conversation-types");
 const { parsePagination, buildPaginationMeta } = require("../../shared/utils/pagination.util");
 const { createGoogleDriveService } = require("../../shared/services/google-drive/google-drive.service");
 const { sendAssignedEmail, sendRejectedEmail } = require("./inbound-mail-response-email.service");
@@ -250,9 +250,10 @@ const assignToTeam = async (id, adminUser, payload) => {
     skipTicketCreatedNotification: true
   });
 
-  const conversation = await TicketConversation.findOne({ ticketId: ticket._id }).sort({
-    createdAt: 1
-  });
+  const conversation = await TicketConversation.findOne({
+    ticketId: ticket._id,
+    type: { $ne: CONVERSATION_TYPES.SYSTEM }
+  }).sort({ createdAt: 1 });
 
   if (conversation) {
     await TicketConversation.findByIdAndUpdate(conversation._id, {
@@ -262,7 +263,7 @@ const assignToTeam = async (id, adminUser, payload) => {
     });
   }
 
-  await copyQueueAttachmentsToTicket(item, ticket, conversation?._id || null, merchant);
+  await copyQueueAttachmentsToTicket(item, ticket, null, merchant);
 
   item.status = INBOUND_MAIL_QUEUE_STATUS.ASSIGNED;
   item.assignedTeamId = team._id;

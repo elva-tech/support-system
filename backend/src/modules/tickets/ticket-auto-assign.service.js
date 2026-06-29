@@ -80,9 +80,9 @@ const assignTicketToAgent = async (ticket, agent, { autoAssigned = false, fromQu
 
   const agentName = `${agent.firstName} ${agent.lastName}`;
   const assignMessage = fromQueue
-    ? `Ticket auto-assigned from queue to ${agentName} (longest available agent)`
+    ? `Ticket assigned from queue to ${agentName}`
     : autoAssigned
-      ? `Ticket auto-assigned to ${agentName}`
+      ? `Ticket assigned to ${agentName}`
       : `Ticket assigned to ${agentName}`;
 
   await conversationService.addSystemEvent(ticket._id, assignMessage);
@@ -100,7 +100,7 @@ const assignTicketToAgent = async (ticket, agent, { autoAssigned = false, fromQu
       autoAssigned,
       fromQueue
     },
-    skipNotificationEvent: autoAssigned
+    skipNotificationEvent: autoAssigned && !fromQueue
   });
 
   return ticket;
@@ -124,7 +124,7 @@ const notifyTeamLeadUnassigned = async (ticket, team, reason) => {
   const ticketUrl = `${env.frontendUrl.replace(/\/$/, "")}/tickets/${ticket._id}`;
   const reasonLine =
     reason === "all_busy"
-      ? "All agents are currently busy — this ticket is in the queue and will auto-assign when an agent becomes available."
+      ? "All agents are currently busy — this ticket is in the queue and will be assigned when an agent becomes available."
       : "No agents are available — this ticket is awaiting team lead assignment.";
 
   const result = await notificationManager.sendEmail({
@@ -203,7 +203,7 @@ const autoAssignOnCreate = async (ticket) => {
 
   const queueMessage =
     reason === "all_busy"
-      ? "All agents are currently busy — ticket queued for auto-assignment when an agent becomes available."
+      ? "All agents are currently busy — ticket queued for assignment when an agent becomes available."
       : "No agents available — awaiting team lead assignment.";
 
   await conversationService.addSystemEvent(ticket._id, queueMessage);
