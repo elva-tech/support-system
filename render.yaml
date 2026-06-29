@@ -75,6 +75,6 @@ services:
       - key: EXPOSE_OTP_IN_RESPONSE
         value: "false"
       - key: LOG_VIEWER_ENABLED
-        value: "false"
+        value: "true"
       - key: GOOGLE_DRIVE_MOCK
         value: "true"

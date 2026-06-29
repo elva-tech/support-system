@@ -37,8 +37,8 @@ const validateEnvironment = () => {
       errors.push("EXPOSE_OTP_IN_RESPONSE must be false in production");
     }
 
-    if (process.env.LOG_VIEWER_ENABLED === "true") {
-      errors.push("LOG_VIEWER_ENABLED must be false in production");
+    if (process.env.LOG_VIEWER_ENABLED === "false" && process.env.LOG_VIEWER_REQUIRE_AUTH === "false") {
+      logger.warn("Log viewer disabled in production — set LOG_VIEWER_ENABLED=true to view logs at /");
     }
 
     if (process.env.NOTIFICATION_FALLBACK_ENABLED === "true") {

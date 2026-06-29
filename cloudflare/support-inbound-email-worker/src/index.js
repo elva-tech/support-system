@@ -59,9 +59,11 @@ export default {
       })
     })
       .then(async (response) => {
+        const body = await response.text();
         if (!response.ok) {
-          const body = await response.text();
           console.error("ELVA webhook failed", response.status, body);
+        } else {
+          console.log("ELVA webhook ok", response.status, body.slice(0, 200));
         }
       })
       .catch((error) => {

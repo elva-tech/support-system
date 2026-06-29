@@ -31,8 +31,8 @@ const logger = {
     console.error(line);
   },
   debug(message, meta) {
-    if (process.env.NODE_ENV !== "production") {
-      const line = pushEntry("debug", message, meta);
+    const line = pushEntry("debug", message, meta);
+    if (process.env.NODE_ENV !== "production" || process.env.LOG_VIEWER_ENABLED !== "false") {
       console.debug(line);
     }
   },

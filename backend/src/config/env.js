@@ -39,9 +39,10 @@ module.exports = {
     process.env.FRONTEND_URL ||
     parseCorsOrigins(process.env.CORS_ORIGIN)[0] ||
     "http://localhost:4200",
-  logViewerEnabled:
-    process.env.LOG_VIEWER_ENABLED === "true" ||
-    (process.env.LOG_VIEWER_ENABLED !== "false" && !isProduction),
+  logViewerEnabled: process.env.LOG_VIEWER_ENABLED !== "false",
+  logViewerRequireAuth:
+    process.env.LOG_VIEWER_REQUIRE_AUTH === "true" ||
+    (process.env.LOG_VIEWER_REQUIRE_AUTH !== "false" && isProduction),
   internalApiKey: process.env.INTERNAL_API_KEY || "dev-internal-api-key-change-me",
   otpExpiresMinutes: parseInt(process.env.OTP_EXPIRES_MINUTES, 10) || 10,
   merchantSessionExpiresMs:

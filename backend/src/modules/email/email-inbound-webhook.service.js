@@ -31,7 +31,7 @@ const processWebhookPayload = async (payload) => {
   const sourceRef = parsed.messageId || payload.messageId || `webhook-${Date.now()}`;
 
   const result = await processParsedEmail(parsed, sourceRef, {
-    requireSupportRecipient: true
+    requireSupportRecipient: false
   });
 
   if (result.action === "SKIPPED" && result.reason === "NOT_SUPPORT_ALIAS") {

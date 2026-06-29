@@ -23,7 +23,11 @@ const notificationCenterRoutes = require("./modules/notifications/notification-c
 const inboundMailQueueRoutes = require("./modules/inbound-mail-queue/inbound-mail-queue.routes");
 const inboundEmailWebhookRoutes = require("./modules/email/email-inbound-webhook.routes");
 
-const { logsViewerMiddleware } = require("./shared/http/logs-viewer");
+const {
+  logsViewerMiddleware,
+  logsViewerLogin,
+  logsViewerLogout
+} = require("./shared/http/logs-viewer");
 
 const app = express();
 
@@ -63,8 +67,11 @@ app.use(
   inboundEmailWebhookRoutes
 );
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false }));
 
 app.get("/", logsViewerMiddleware);
+app.post("/logs/login", logsViewerLogin);
+app.post("/logs/logout", logsViewerLogout);
 
 app.get("/health", async (_req, res) => {
   const health = await getHealth();
