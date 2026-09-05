@@ -22,9 +22,16 @@ const { sendAssignedEmail, sendRejectedEmail } = require("./inbound-mail-respons
 const { logAudit } = require("../audit/audit.service");
 const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/constants/audit-actions");
 const logger = require("../../shared/utils/logger");
+const { withTenantFilter } = require("../../shared/utils/tenant-scope.util");
 
 const driveService = createGoogleDriveService();
 const QUEUE_FOLDER_PREFIX = "INBOUND-MAIL";
+
+const requireTenant = (tenantId) => {
+  if (!tenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
+};
 
 const populateOptions = [
   { path: "assignedTeamId", select: "name" },
@@ -101,9 +108,11 @@ const enqueueFromEmail = async ({
   return item;
 };
 
-const listQueue = async (filters = {}) => {
+const listQueue = async (filters = {}, { tenantId } = {}) => {
+  requireTenant(tenantId);
   const { page, limit, skip } = parsePagination(filters);
-  const query = {};
+  // Fail closed: records with tenantId null never match an ObjectId filter
+  const query = withTenantFilter(tenantId);
 
   if (filters.status) {
     query.status = filters.status;
@@ -122,8 +131,11 @@ const listQueue = async (filters = {}) => {
   };
 };
 
-const getQueueItem = async (id) => {
-  const item = await InboundMailQueue.findById(id).populate(populateOptions);
+const getQueueItem = async (id, { tenantId } = {}) => {
+  requireTenant(tenantId);
+  const item = await InboundMailQueue.findOne(withTenantFilter(tenantId, { _id: id })).populate(
+    populateOptions
+  );
   if (!item) {
     throw new ApiError(404, "Inbound mail queue item not found");
   }
@@ -215,8 +227,9 @@ const copyQueueAttachmentsToTicket = async (item, ticket, conversationId, mercha
   return created;
 };
 
-const assignToTeam = async (id, adminUser, payload) => {
-  const item = await InboundMailQueue.findById(id);
+const assignToTeam = async (id, adminUser, payload, { tenantId } = {}) => {
+  requireTenant(tenantId);
+  const item = await InboundMailQueue.findOne(withTenantFilter(tenantId, { _id: id }));
   if (!item) {
     throw new ApiError(404, "Inbound mail queue item not found");
   }
@@ -226,13 +239,13 @@ const assignToTeam = async (id, adminUser, payload) => {
   }
 
   const [application, moduleDoc, team] = await Promise.all([
-    Application.findById(payload.applicationId),
+    Application.findOne(withTenantFilter(tenantId, { _id: payload.applicationId })),
     Module.findOne({
       _id: payload.moduleId,
       applicationId: payload.applicationId,
       isActive: true
     }),
-    Team.findOne({ _id: payload.teamId, isActive: true })
+    Team.findOne(withTenantFilter(tenantId, { _id: payload.teamId, isActive: true }))
   ]);
 
   if (!application) {
@@ -287,11 +300,9 @@ const assignToTeam = async (id, adminUser, payload) => {
   item.assignedApplicationId = application._id;
   item.assignedModuleId = moduleDoc._id;
   item.ticketId = ticket._id;
-  if (ticket.tenantId) {
-    item.tenantId = ticket.tenantId;
-    item.routingStatus = INBOUND_MAIL_ROUTING_STATUS.RESOLVED;
-    item.routingReason = "MANUAL_ASSIGNMENT";
-  }
+  item.tenantId = tenantId;
+  item.routingStatus = INBOUND_MAIL_ROUTING_STATUS.RESOLVED;
+  item.routingReason = "MANUAL_ASSIGNMENT";
   item.reviewedBy = adminUser._id;
   item.reviewedAt = new Date();
   item.adminNotes = payload.notes || "";
@@ -320,7 +331,7 @@ const assignToTeam = async (id, adminUser, payload) => {
     actorType: ACTOR_TYPES.AGENT,
     actorId: adminUser._id,
     actorName: `${adminUser.firstName} ${adminUser.lastName}`,
-    tenantId: ticket.tenantId || item.tenantId || null,
+    tenantId,
     metadata: {
       ticketNumber: ticket.ticketNumber,
       inboundMailQueueId: item._id.toString(),
@@ -329,11 +340,12 @@ const assignToTeam = async (id, adminUser, payload) => {
     skipNotificationEvent: true
   });
 
-  return getQueueItem(item._id);
+  return getQueueItem(item._id, { tenantId });
 };
 
-const rejectMail = async (id, adminUser, reason) => {
-  const item = await InboundMailQueue.findById(id);
+const rejectMail = async (id, adminUser, reason, { tenantId } = {}) => {
+  requireTenant(tenantId);
+  const item = await InboundMailQueue.findOne(withTenantFilter(tenantId, { _id: id }));
   if (!item) {
     throw new ApiError(404, "Inbound mail queue item not found");
   }
@@ -366,11 +378,12 @@ const rejectMail = async (id, adminUser, reason) => {
     });
   }
 
-  return getQueueItem(item._id);
+  return getQueueItem(item._id, { tenantId });
 };
 
-const getAttachmentDownload = async (queueItemId, attachmentId) => {
-  const item = await InboundMailQueue.findById(queueItemId);
+const getAttachmentDownload = async (queueItemId, attachmentId, { tenantId } = {}) => {
+  requireTenant(tenantId);
+  const item = await InboundMailQueue.findOne(withTenantFilter(tenantId, { _id: queueItemId }));
   if (!item) {
     throw new ApiError(404, "Inbound mail queue item not found");
   }

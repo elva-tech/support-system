@@ -6,10 +6,12 @@ import { ApiResponse } from '../models';
 
 export interface InvitationValidation {
   valid: boolean;
+  invitationType?: 'TENANT_ADMIN' | 'STAFF';
   tenantName?: string;
   tenantSlug?: string;
   adminName?: string;
   adminEmail?: string;
+  role?: string;
   expiresAt?: string;
 }
 

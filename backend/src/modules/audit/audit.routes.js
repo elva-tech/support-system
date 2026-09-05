@@ -1,5 +1,6 @@
 const express = require("express");
-const dashboardController = require("./dashboard.controller");
+const asyncHandler = require("../../shared/utils/asyncHandler");
+const { listTenantAuditLogs } = require("./audit.service");
 const authenticate = require("../../shared/middleware/auth.middleware");
 const authorize = require("../../shared/middleware/role.middleware");
 const {
@@ -13,17 +14,14 @@ const router = express.Router();
 router.use(authenticate);
 router.use(requireTenantContext);
 router.use(requireTenantMembership);
+router.use(authorize(ROLES.ADMIN));
 
-router.get("/agent", dashboardController.getAgentMetrics);
 router.get(
-  "/team-workload",
-  authorize(ROLES.ADMIN, ROLES.TEAM_LEAD),
-  dashboardController.getTeamWorkload
-);
-router.get(
-  "/omnichannel",
-  authorize(ROLES.ADMIN, ROLES.TEAM_LEAD),
-  dashboardController.getOmnichannelWidgets
+  "/",
+  asyncHandler(async (req, res) => {
+    const result = await listTenantAuditLogs(req.query, { tenantId: req.tenant._id });
+    res.json(result);
+  })
 );
 
 module.exports = router;

@@ -16,7 +16,7 @@ import { formatApiError } from '../../shared/utils/api-error.util';
   imports: [CommonModule, ReactiveFormsModule, RouterLink, ElvaHeaderComponent, ElvaFooterComponent],
   template: `
     <div class="flex min-h-screen flex-col bg-gradient-to-br from-elva-950 via-elva-900 to-elva-brand">
-      <app-elva-header align="center" subtitle="Account setup" tagline="Activate your workspace admin" />
+      <app-elva-header align="center" subtitle="Account setup" tagline="Activate your workspace account" />
 
       <main class="flex flex-1 items-center justify-center px-4 py-8">
         <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
@@ -41,7 +41,13 @@ import { formatApiError } from '../../shared/utils/api-error.util';
           } @else {
             <div class="mb-6 text-center">
               <h1 class="text-xl font-bold text-slate-900">Set your password</h1>
-              <p class="mt-2 text-sm text-slate-500">Complete setup for your administrator account</p>
+              <p class="mt-2 text-sm text-slate-500">
+                {{
+                  invite()?.invitationType === 'STAFF'
+                    ? 'Complete setup for your staff account'
+                    : 'Complete setup for your administrator account'
+                }}
+              </p>
             </div>
 
             <dl class="mb-6 space-y-2 rounded-lg bg-slate-50 px-4 py-3 text-sm">
@@ -50,13 +56,19 @@ import { formatApiError } from '../../shared/utils/api-error.util';
                 <dd class="font-medium text-slate-900">{{ invite()?.tenantName }}</dd>
               </div>
               <div class="flex justify-between gap-2">
-                <dt class="text-slate-500">Admin</dt>
+                <dt class="text-slate-500">Name</dt>
                 <dd class="font-medium text-slate-900">{{ invite()?.adminName }}</dd>
               </div>
               <div class="flex justify-between gap-2">
                 <dt class="text-slate-500">Email</dt>
                 <dd class="font-medium text-slate-900">{{ invite()?.adminEmail }}</dd>
               </div>
+              @if (invite()?.role) {
+                <div class="flex justify-between gap-2">
+                  <dt class="text-slate-500">Role</dt>
+                  <dd class="font-medium text-slate-900">{{ invite()?.role }}</dd>
+                </div>
+              }
             </dl>
 
             @if (error()) {

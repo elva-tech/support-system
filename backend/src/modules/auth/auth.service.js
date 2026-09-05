@@ -4,6 +4,7 @@ const env = require("../../config/env");
 const User = require("../users/user.model");
 const { logAudit } = require("../audit/audit.service");
 const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/constants/audit-actions");
+const { isUserLoginAllowed } = require("../../shared/constants/user-lifecycle");
 
 const signToken = (userId) =>
   jwt.sign({ sub: userId }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
@@ -15,7 +16,7 @@ const login = async (email, password, { tenantId } = {}) => {
 
   const user = await User.findOne({ email, tenantId }).select("+password");
 
-  if (!user || !user.isActive) {
+  if (!user || !isUserLoginAllowed(user)) {
     throw new ApiError(401, "Invalid email or password");
   }
 

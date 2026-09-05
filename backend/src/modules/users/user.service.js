@@ -3,8 +3,9 @@ const User = require("./user.model");
 const Team = require("../teams/team.model");
 const Application = require("../applications/application.model");
 const { ROLES } = require("../../shared/constants/roles");
-const onboardingEmail = require("../notifications/onboarding-email.service");
+const { USER_STATUSES } = require("../../shared/constants/user-lifecycle");
 const { stripClientTenantId, withTenantFilter } = require("../../shared/utils/tenant-scope.util");
+const staffInvitationService = require("../staff-invitations/staff-invitation.service");
 
 const populateOptions = [
   { path: "teamId", select: "name" },
@@ -127,6 +128,10 @@ const list = async (filters = {}, { tenantId } = {}) => {
     query.isActive = filters.isActive === "true";
   }
 
+  if (filters.status) {
+    query.status = filters.status;
+  }
+
   if (filters.search) {
     query.$or = [
       { firstName: { $regex: filters.search, $options: "i" } },
@@ -148,34 +153,12 @@ const getById = async (id, { tenantId } = {}) => {
   return user;
 };
 
-const create = async (data, { tenantId } = {}) => {
-  if (!tenantId) {
-    throw new ApiError(400, "Tenant context is required");
-  }
-
-  const payload = stripClientTenantId(data);
-  const existing = await User.findOne({ email: payload.email, tenantId });
-
-  if (existing) {
-    throw new ApiError(409, "Email already exists");
-  }
-
-  const plainPassword = payload.password;
-  await applyStaffTeamAssignment(payload, { tenantId });
-  await validateReferences(payload, { tenantId });
-
-  const user = await User.create({
-    ...payload,
-    tenantId
-  });
-  await syncTeamMembership(user._id, user.teamId, null, user.role, { tenantId });
-  await syncTeamLeadRole(user, { tenantId });
-
-  if (user.role !== ROLES.ADMIN && plainPassword) {
-    await onboardingEmail.sendStaffWelcomeEmail(user, plainPassword);
-  }
-
-  return User.findOne(withTenantFilter(tenantId, { _id: user._id })).populate(populateOptions);
+/**
+ * Create/invite staff — Phase 10: no admin-supplied passwords.
+ * Delegates to staff invitation flow (INVITED + secure setup link).
+ */
+const create = async (data, { tenantId, createdByUserId } = {}) => {
+  return staffInvitationService.inviteStaff(data, { tenantId, createdByUserId });
 };
 
 const update = async (id, data, { tenantId } = {}) => {
@@ -198,11 +181,23 @@ const update = async (id, data, { tenantId } = {}) => {
 
   const previousTeamId = user.teamId;
   const previousRole = user.role;
-  const plainPassword = payload.password || null;
 
-  if (payload.password) {
-    user.password = payload.password;
-    delete payload.password;
+  // Admins must not set or learn passwords — staff use invitation setup
+  delete payload.password;
+
+  if (payload.status) {
+    if (payload.status === USER_STATUSES.ACTIVE && user.status === USER_STATUSES.INVITED) {
+      throw new ApiError(400, "Invited users must complete account setup to become active");
+    }
+  } else if (payload.isActive !== undefined) {
+    if (payload.isActive === true && user.status === USER_STATUSES.INVITED) {
+      throw new ApiError(400, "Invited users must complete account setup to become active");
+    }
+    if (payload.isActive === true) {
+      payload.status = USER_STATUSES.ACTIVE;
+    } else if (user.status === USER_STATUSES.ACTIVE || !user.status) {
+      payload.status = USER_STATUSES.DEACTIVATED;
+    }
   }
 
   Object.assign(user, payload);
@@ -225,10 +220,6 @@ const update = async (id, data, { tenantId } = {}) => {
   await syncTeamMembership(user._id, user.teamId, previousTeamId, user.role, { tenantId });
   await syncTeamLeadRole(user, { previousTeamId, previousRole, tenantId });
 
-  if (plainPassword && user.role !== ROLES.ADMIN) {
-    await onboardingEmail.sendStaffPasswordUpdatedEmail(user, plainPassword);
-  }
-
   return User.findOne(withTenantFilter(tenantId, { _id: id })).populate(populateOptions);
 };
 
@@ -242,4 +233,16 @@ const remove = async (id, currentUserId, { tenantId } = {}) => {
   return user;
 };
 
-module.exports = { list, getById, create, update, remove };
+module.exports = {
+  list,
+  getById,
+  create,
+  update,
+  remove,
+  inviteStaff: staffInvitationService.inviteStaff,
+  resendInvitation: staffInvitationService.resendInvitation,
+  revokeInvitation: staffInvitationService.revokeInvitation,
+  suspendUser: staffInvitationService.suspendUser,
+  deactivateUser: staffInvitationService.deactivateUser,
+  reactivateUser: staffInvitationService.reactivateUser
+};

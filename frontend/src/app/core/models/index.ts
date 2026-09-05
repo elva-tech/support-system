@@ -1,5 +1,7 @@
 export type UserRole = 'ADMIN' | 'TEAM_LEAD' | 'AGENT';
 
+export type UserLifecycleStatus = 'INVITED' | 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
+
 export interface ApplicationRef {
   _id: string;
   name: string;
@@ -20,6 +22,7 @@ export interface User {
   role: UserRole;
   teamId?: TeamRef | string | null;
   applicationIds?: ApplicationRef[] | string[];
+  status?: UserLifecycleStatus;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;

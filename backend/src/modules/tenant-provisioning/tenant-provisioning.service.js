@@ -230,6 +230,7 @@ const runProvisioningPipeline = async (provisioning, { actor, tenantPayload } = 
 
       if (!user) {
         const { firstName, lastName } = splitAdminName(provisioning.tenantAdminName);
+        const { USER_STATUSES } = require("../../shared/constants/user-lifecycle");
         user = await User.create({
           tenantId: tenant._id,
           email: provisioning.tenantAdminEmail,
@@ -237,6 +238,7 @@ const runProvisioningPipeline = async (provisioning, { actor, tenantPayload } = 
           firstName,
           lastName,
           role: ROLES.ADMIN,
+          status: USER_STATUSES.INVITED,
           isActive: false,
           teamId: null,
           applicationIds: []
@@ -715,10 +717,12 @@ const validateInvitationToken = async (rawToken) => {
 
   return {
     valid: true,
+    invitationType: "TENANT_ADMIN",
     tenantName: tenant.name,
     tenantSlug: tenant.slug,
     adminName: `${user.firstName} ${user.lastName}`.replace(/ -$/, "").trim(),
     adminEmail: user.email,
+    role: user.role,
     expiresAt: invitation.expiresAt
   };
 };
@@ -770,7 +774,9 @@ const completeAccountSetup = async ({ token, password, confirmPassword }) => {
     throw invalidInvitation();
   }
 
+  const { USER_STATUSES } = require("../../shared/constants/user-lifecycle");
   user.password = password;
+  user.status = USER_STATUSES.ACTIVE;
   user.isActive = true;
   await user.save();
 

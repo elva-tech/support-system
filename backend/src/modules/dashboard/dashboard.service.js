@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Ticket = require("../tickets/ticket.model");
 const User = require("../users/user.model");
 const Team = require("../teams/team.model");
@@ -14,6 +15,7 @@ const { DELIVERY_STATUS } = require("../../shared/constants/notification-types")
 const { ROLES } = require("../../shared/constants/roles");
 const ApiError = require("../../shared/utils/ApiError");
 const resolveRefId = require("../../shared/utils/resolve-ref-id");
+const { withTenantFilter } = require("../../shared/utils/tenant-scope.util");
 
 const startOfToday = () => {
   const d = new Date();
@@ -21,10 +23,33 @@ const startOfToday = () => {
   return d;
 };
 
-const getAverageResolutionTimeHours = async () => {
-  const resolvedTickets = await Ticket.find({
-    status: TICKET_STATUSES.RESOLVED
-  }).select("createdAt updatedAt");
+const toObjectId = (tenantId) =>
+  tenantId instanceof mongoose.Types.ObjectId
+    ? tenantId
+    : new mongoose.Types.ObjectId(String(tenantId));
+
+const countConversationsForTenant = async (tenantId, match = {}) => {
+  const result = await TicketConversation.aggregate([
+    { $match: match },
+    {
+      $lookup: {
+        from: "tickets",
+        localField: "ticketId",
+        foreignField: "_id",
+        as: "ticket"
+      }
+    },
+    { $unwind: "$ticket" },
+    { $match: { "ticket.tenantId": toObjectId(tenantId) } },
+    { $count: "total" }
+  ]);
+  return result[0]?.total || 0;
+};
+
+const getAverageResolutionTimeHours = async (tenantId) => {
+  const resolvedTickets = await Ticket.find(
+    withTenantFilter(tenantId, { status: TICKET_STATUSES.RESOLVED })
+  ).select("createdAt updatedAt");
 
   if (!resolvedTickets.length) {
     return 0;
@@ -38,24 +63,32 @@ const getAverageResolutionTimeHours = async () => {
   return Math.round((totalMs / resolvedTickets.length / (1000 * 60 * 60)) * 10) / 10;
 };
 
-const getAgentMetrics = async (user) => {
+const getAgentMetrics = async (user, { tenantId } = {}) => {
+  if (!tenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
+
   const userId = user._id;
   const todayStart = startOfToday();
 
   const [assignedTickets, resolvedToday, ticketsCreatedToday, ticketsResolvedToday, averageResolutionTime] =
     await Promise.all([
-      Ticket.find({ assignedTo: userId }),
-      Ticket.countDocuments({
-        assignedTo: userId,
-        status: TICKET_STATUSES.RESOLVED,
-        updatedAt: { $gte: todayStart }
-      }),
-      Ticket.countDocuments({ createdAt: { $gte: todayStart } }),
-      Ticket.countDocuments({
-        status: TICKET_STATUSES.RESOLVED,
-        updatedAt: { $gte: todayStart }
-      }),
-      getAverageResolutionTimeHours()
+      Ticket.find(withTenantFilter(tenantId, { assignedTo: userId })),
+      Ticket.countDocuments(
+        withTenantFilter(tenantId, {
+          assignedTo: userId,
+          status: TICKET_STATUSES.RESOLVED,
+          updatedAt: { $gte: todayStart }
+        })
+      ),
+      Ticket.countDocuments(withTenantFilter(tenantId, { createdAt: { $gte: todayStart } })),
+      Ticket.countDocuments(
+        withTenantFilter(tenantId, {
+          status: TICKET_STATUSES.RESOLVED,
+          updatedAt: { $gte: todayStart }
+        })
+      ),
+      getAverageResolutionTimeHours(tenantId)
     ]);
 
   return {
@@ -70,7 +103,11 @@ const getAgentMetrics = async (user) => {
   };
 };
 
-const getTeamWorkload = async (user, teamIdFilter) => {
+const getTeamWorkload = async (user, teamIdFilter, { tenantId } = {}) => {
+  if (!tenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
+
   let teamId = teamIdFilter;
 
   if (user.role === ROLES.TEAM_LEAD) {
@@ -81,21 +118,25 @@ const getTeamWorkload = async (user, teamIdFilter) => {
   }
 
   if (!teamId && user.role === ROLES.ADMIN) {
-    const teams = await Team.find({ isActive: true }).select("name");
+    const teams = await Team.find(withTenantFilter(tenantId, { isActive: true })).select("name");
     const workloads = [];
 
     for (const team of teams) {
-      const members = await User.find({
-        teamId: team._id,
-        role: { $in: [ROLES.AGENT, ROLES.TEAM_LEAD] },
-        isActive: true
-      }).select("firstName lastName");
+      const members = await User.find(
+        withTenantFilter(tenantId, {
+          teamId: team._id,
+          role: { $in: [ROLES.AGENT, ROLES.TEAM_LEAD] },
+          isActive: true
+        })
+      ).select("firstName lastName");
 
       for (const member of members) {
-        const ticketCount = await Ticket.countDocuments({
-          assignedTo: member._id,
-          status: { $in: ACTIVE_TICKET_STATUSES }
-        });
+        const ticketCount = await Ticket.countDocuments(
+          withTenantFilter(tenantId, {
+            assignedTo: member._id,
+            status: { $in: ACTIVE_TICKET_STATUSES }
+          })
+        );
         workloads.push({
           userId: member._id,
           name: `${member.firstName} ${member.lastName}`,
@@ -113,23 +154,27 @@ const getTeamWorkload = async (user, teamIdFilter) => {
     throw new ApiError(400, "Team id is required");
   }
 
-  const team = await Team.findById(teamId);
+  const team = await Team.findOne(withTenantFilter(tenantId, { _id: teamId }));
   if (!team) {
     throw new ApiError(404, "Team not found");
   }
 
-  const members = await User.find({
-    teamId,
-    role: { $in: [ROLES.AGENT, ROLES.TEAM_LEAD] },
-    isActive: true
-  }).select("firstName lastName");
+  const members = await User.find(
+    withTenantFilter(tenantId, {
+      teamId,
+      role: { $in: [ROLES.AGENT, ROLES.TEAM_LEAD] },
+      isActive: true
+    })
+  ).select("firstName lastName");
 
   const workloads = await Promise.all(
     members.map(async (member) => {
-      const ticketCount = await Ticket.countDocuments({
-        assignedTo: member._id,
-        status: { $in: ACTIVE_TICKET_STATUSES }
-      });
+      const ticketCount = await Ticket.countDocuments(
+        withTenantFilter(tenantId, {
+          assignedTo: member._id,
+          status: { $in: ACTIVE_TICKET_STATUSES }
+        })
+      );
 
       return {
         userId: member._id,
@@ -144,8 +189,10 @@ const getTeamWorkload = async (user, teamIdFilter) => {
   return workloads.sort((a, b) => b.ticketCount - a.ticketCount);
 };
 
-const getAverageFirstResponseTimeHours = async () => {
-  const tickets = await Ticket.find().select("_id createdAt").limit(500);
+const getAverageFirstResponseTimeHours = async (tenantId) => {
+  const tickets = await Ticket.find(withTenantFilter(tenantId))
+    .select("_id createdAt")
+    .limit(500);
   if (!tickets.length) {
     return 0;
   }
@@ -172,7 +219,11 @@ const getAverageFirstResponseTimeHours = async () => {
   return Math.round((totalMs / counted / (1000 * 60 * 60)) * 10) / 10;
 };
 
-const getOmnichannelWidgets = async () => {
+const getOmnichannelWidgets = async ({ tenantId } = {}) => {
+  if (!tenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
+
   const [
     portalMessages,
     emailMessages,
@@ -180,17 +231,19 @@ const getOmnichannelWidgets = async () => {
     pendingNotifications,
     averageFirstResponseTime
   ] = await Promise.all([
-    TicketConversation.countDocuments({
+    countConversationsForTenant(tenantId, {
       type: CONVERSATION_TYPES.MESSAGE,
       source: CONVERSATION_SOURCES.PORTAL
     }),
-    TicketConversation.countDocuments({
+    countConversationsForTenant(tenantId, {
       type: CONVERSATION_TYPES.MESSAGE,
       source: CONVERSATION_SOURCES.EMAIL
     }),
-    NotificationDelivery.countDocuments({ status: DELIVERY_STATUS.FAILED }),
-    NotificationEvent.countDocuments({ processed: false }),
-    getAverageFirstResponseTimeHours()
+    NotificationDelivery.countDocuments(
+      withTenantFilter(tenantId, { status: DELIVERY_STATUS.FAILED })
+    ),
+    NotificationEvent.countDocuments(withTenantFilter(tenantId, { processed: false })),
+    getAverageFirstResponseTimeHours(tenantId)
   ]);
 
   return {

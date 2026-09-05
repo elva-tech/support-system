@@ -3,6 +3,7 @@ const ApiError = require("../utils/ApiError");
 const env = require("../../config/env");
 const User = require("../../modules/users/user.model");
 const { PLATFORM_IDENTITY_TYPE } = require("../constants/platform");
+const { isUserLoginAllowed } = require("../constants/user-lifecycle");
 
 /**
  * Tenant staff JWT authentication.
@@ -30,7 +31,7 @@ const authenticate = async (req, res, next) => {
       .populate("teamId", "name")
       .populate("applicationIds", "name code");
 
-    if (!user || !user.isActive) {
+    if (!user || !isUserLoginAllowed(user)) {
       return next(new ApiError(401, "Invalid or inactive account"));
     }
 

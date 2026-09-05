@@ -256,6 +256,48 @@ const renderTenantAdminInvitationEmail = ({
     `
   });
 
+const ROLE_LABELS = {
+  ADMIN: "Administrator",
+  TEAM_LEAD: "Team Lead",
+  AGENT: "Support Agent"
+};
+
+const renderStaffInvitationEmail = ({
+  inviteeName,
+  tenantName,
+  workspaceUrl,
+  invitationUrl,
+  role,
+  expiryHours,
+  supportEmail,
+  branding
+}) => {
+  const roleLabel = ROLE_LABELS[role] || role || "team member";
+  const orgName = tenantName || branding?.tenantName || "your organization";
+
+  return renderEmailLayout({
+    heroTitle: `Welcome to ${orgName} Support Portal`,
+    heroSubtitle: branding?.productName || "Support workspace invitation",
+    preheader: `You have been invited to join ${orgName}`,
+    branding,
+    bodyHtml: `
+      ${renderParagraph(`Hello ${escapeHtml(inviteeName)},`)}
+      ${renderParagraph(
+        `You have been invited to join <strong>${escapeHtml(orgName)}</strong>'s support workspace as a <strong>${escapeHtml(roleLabel)}</strong>.`
+      )}
+      ${renderInfoBox(`
+        <strong>Organization:</strong> ${escapeHtml(orgName)}<br/>
+        <strong>Workspace:</strong> <a href="${escapeHtml(workspaceUrl)}" style="color:#4a6789;">${escapeHtml(workspaceUrl)}</a><br/>
+        <strong>Role:</strong> ${escapeHtml(roleLabel)}
+      `)}
+      ${renderParagraph("Complete your account setup using the secure link below. You will choose your own password — no one else knows it.")}
+      ${renderCtaButton("Complete account setup", invitationUrl)}
+      ${renderParagraph(`<span style="font-size:14px;color:${MUTED};">This invitation expires in <strong>${escapeHtml(String(expiryHours))} hours</strong>.</span>`)}
+      ${renderParagraph(`<span style="font-size:14px;color:${MUTED};">If you did not expect this invitation, you can ignore this email or contact <a href="mailto:${escapeHtml(supportEmail || "support@elvatech.in")}" style="color:#4a6789;">${escapeHtml(supportEmail || "support@elvatech.in")}</a>.</span>`)}
+    `
+  });
+};
+
 module.exports = {
   renderOtpEmail,
   renderNotificationEmail,
@@ -270,5 +312,6 @@ module.exports = {
   renderInboundAssignedEmail,
   renderInboundRejectedEmail,
   renderTeamLeadAlertEmail,
-  renderTenantAdminInvitationEmail
+  renderTenantAdminInvitationEmail,
+  renderStaffInvitationEmail
 };

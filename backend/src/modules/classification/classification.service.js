@@ -6,18 +6,25 @@ const ClassificationQueue = require("./classification-queue.model");
 const classificationEngine = require("./engines/classification.engine");
 const { CLASSIFICATION_QUEUE_STATUS } = require("../../shared/constants/classification");
 const { parsePagination, buildPaginationMeta } = require("../../shared/utils/pagination.util");
+const { withTenantFilter, stripClientTenantId } = require("../../shared/utils/tenant-scope.util");
 
-const listProfiles = async () => {
-  const profiles = await ApplicationProfile.find()
+const requireTenant = (tenantId) => {
+  if (!tenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
+};
+
+const listProfiles = async ({ tenantId } = {}) => {
+  requireTenant(tenantId);
+  return ApplicationProfile.find(withTenantFilter(tenantId))
     .populate("applicationId", "code name isActive")
     .populate("modules.moduleId", "code name")
     .sort({ createdAt: -1 });
-
-  return profiles;
 };
 
-const getProfileById = async (id) => {
-  const profile = await ApplicationProfile.findById(id)
+const getProfileById = async (id, { tenantId } = {}) => {
+  requireTenant(tenantId);
+  const profile = await ApplicationProfile.findOne(withTenantFilter(tenantId, { _id: id }))
     .populate("applicationId", "code name isActive")
     .populate("modules.moduleId", "code name");
 
@@ -30,6 +37,7 @@ const getProfileById = async (id) => {
 
 const validateProfileModules = async (applicationId, modules = []) => {
   for (const entry of modules) {
+    // Modules inherit tenant via parent Application (validated separately)
     const moduleDoc = await Module.findOne({
       _id: entry.moduleId,
       applicationId,
@@ -42,69 +50,84 @@ const validateProfileModules = async (applicationId, modules = []) => {
   }
 };
 
-const createProfile = async (payload) => {
-  const application = await Application.findById(payload.applicationId);
+const createProfile = async (payload, { tenantId } = {}) => {
+  requireTenant(tenantId);
+  const clean = stripClientTenantId(payload);
+  const application = await Application.findOne(
+    withTenantFilter(tenantId, { _id: clean.applicationId })
+  );
   if (!application) {
     throw new ApiError(404, "Application not found");
   }
 
-  const existing = await ApplicationProfile.findOne({ applicationId: application._id });
+  const existing = await ApplicationProfile.findOne(
+    withTenantFilter(tenantId, { applicationId: application._id })
+  );
   if (existing) {
     throw new ApiError(409, "Application profile already exists for this application");
   }
 
-  await validateProfileModules(application._id, payload.modules || []);
+  await validateProfileModules(application._id, clean.modules || []);
 
   return ApplicationProfile.create({
-    ...(application.tenantId ? { tenantId: application.tenantId } : {}),
+    tenantId,
     applicationId: application._id,
-    keywords: payload.keywords || [],
-    modules: payload.modules || [],
-    confidenceThreshold: payload.confidenceThreshold
+    keywords: clean.keywords || [],
+    modules: clean.modules || [],
+    confidenceThreshold: clean.confidenceThreshold
   });
 };
 
-const updateProfile = async (id, payload) => {
-  const profile = await ApplicationProfile.findById(id);
+const updateProfile = async (id, payload, { tenantId } = {}) => {
+  requireTenant(tenantId);
+  const clean = stripClientTenantId(payload);
+  const profile = await ApplicationProfile.findOne(withTenantFilter(tenantId, { _id: id }));
   if (!profile) {
     throw new ApiError(404, "Application profile not found");
   }
 
-  if (payload.modules) {
-    await validateProfileModules(profile.applicationId, payload.modules);
-    profile.modules = payload.modules;
+  if (clean.modules) {
+    await validateProfileModules(profile.applicationId, clean.modules);
+    profile.modules = clean.modules;
   }
 
-  if (payload.keywords) {
-    profile.keywords = payload.keywords;
+  if (clean.keywords) {
+    profile.keywords = clean.keywords;
   }
 
-  if (payload.confidenceThreshold != null) {
-    profile.confidenceThreshold = payload.confidenceThreshold;
+  if (clean.confidenceThreshold != null) {
+    profile.confidenceThreshold = clean.confidenceThreshold;
   }
 
   await profile.save();
-  return getProfileById(profile._id);
+  return getProfileById(profile._id, { tenantId });
 };
 
-const classifyConversation = async (payload) => {
+/**
+ * HTTP classify uses request tenant via opts.tenantId (client body tenantId ignored).
+ * Workers/tests may pass persisted tenantId on the payload.
+ */
+const classifyConversation = async (payload, { tenantId } = {}) => {
+  const clean = stripClientTenantId(payload);
+  const effectiveTenantId = tenantId || payload.tenantId || null;
+
   const result = await classificationEngine.classify({
-    senderEmail: payload.senderEmail,
-    subject: payload.subject,
-    body: payload.body,
-    channelMetadata: payload.channelMetadata || {},
-    tenantId: payload.tenantId || null
+    senderEmail: clean.senderEmail,
+    subject: clean.subject,
+    body: clean.body,
+    channelMetadata: clean.channelMetadata || {},
+    tenantId: effectiveTenantId
   });
 
   let queueItem = null;
-  const tenantId = result.tenantId || payload.tenantId || null;
+  const resolvedTenantId = result.tenantId || effectiveTenantId || null;
 
-  if (payload.enqueue !== false && result.requiresManualClassification) {
+  if (clean.enqueue !== false && result.requiresManualClassification) {
     queueItem = await ClassificationQueue.create({
-      ...(tenantId ? { tenantId } : {}),
-      senderEmail: payload.senderEmail,
-      subject: payload.subject,
-      body: payload.body || "",
+      ...(resolvedTenantId ? { tenantId: resolvedTenantId } : {}),
+      senderEmail: clean.senderEmail,
+      subject: clean.subject,
+      body: clean.body || "",
       ticketReference: result.existingTicket?.ticketNumber || null,
       isExistingTicket: result.isExistingTicket,
       existingTicketId: result.existingTicket?.id || null,
@@ -121,9 +144,11 @@ const classifyConversation = async (payload) => {
   return { ...result, queueItemId: queueItem?._id?.toString() || null };
 };
 
-const listQueue = async (filters = {}) => {
+const listQueue = async (filters = {}, { tenantId } = {}) => {
+  requireTenant(tenantId);
   const { page, limit, skip } = parsePagination(filters);
-  const query = {};
+  // Fail closed for legacy null tenantId rows
+  const query = withTenantFilter(tenantId);
 
   if (filters.status) {
     query.status = filters.status;
@@ -148,8 +173,9 @@ const listQueue = async (filters = {}) => {
   };
 };
 
-const getQueueItem = async (id) => {
-  const item = await ClassificationQueue.findById(id)
+const getQueueItem = async (id, { tenantId } = {}) => {
+  requireTenant(tenantId);
+  const item = await ClassificationQueue.findOne(withTenantFilter(tenantId, { _id: id }))
     .populate("suggestedApplicationId", "code name")
     .populate("suggestedModuleId", "code name")
     .populate("resolvedApplicationId", "code name")
@@ -163,8 +189,10 @@ const getQueueItem = async (id) => {
   return item;
 };
 
-const resolveQueueItem = async (id, userId, payload) => {
-  const item = await ClassificationQueue.findById(id);
+const resolveQueueItem = async (id, userId, payload, { tenantId } = {}) => {
+  requireTenant(tenantId);
+  const clean = stripClientTenantId(payload);
+  const item = await ClassificationQueue.findOne(withTenantFilter(tenantId, { _id: id }));
   if (!item) {
     throw new ApiError(404, "Classification queue item not found");
   }
@@ -173,13 +201,15 @@ const resolveQueueItem = async (id, userId, payload) => {
     throw new ApiError(400, "Only pending queue items can be resolved");
   }
 
-  const application = await Application.findById(payload.applicationId);
+  const application = await Application.findOne(
+    withTenantFilter(tenantId, { _id: clean.applicationId })
+  );
   if (!application) {
     throw new ApiError(404, "Application not found");
   }
 
   const moduleDoc = await Module.findOne({
-    _id: payload.moduleId,
+    _id: clean.moduleId,
     applicationId: application._id,
     isActive: true
   });
@@ -193,15 +223,17 @@ const resolveQueueItem = async (id, userId, payload) => {
   item.resolvedModuleId = moduleDoc._id;
   item.resolvedBy = userId;
   item.resolvedAt = new Date();
-  item.resolutionNotes = payload.notes || "";
+  item.resolutionNotes = clean.notes || "";
   item.requiresManualClassification = false;
+  item.tenantId = tenantId;
 
   await item.save();
-  return getQueueItem(item._id);
+  return getQueueItem(item._id, { tenantId });
 };
 
-const dismissQueueItem = async (id, userId, notes = "") => {
-  const item = await ClassificationQueue.findById(id);
+const dismissQueueItem = async (id, userId, notes = "", { tenantId } = {}) => {
+  requireTenant(tenantId);
+  const item = await ClassificationQueue.findOne(withTenantFilter(tenantId, { _id: id }));
   if (!item) {
     throw new ApiError(404, "Classification queue item not found");
   }
@@ -216,7 +248,7 @@ const dismissQueueItem = async (id, userId, notes = "") => {
   item.resolutionNotes = notes;
   await item.save();
 
-  return getQueueItem(item._id);
+  return getQueueItem(item._id, { tenantId });
 };
 
 module.exports = {

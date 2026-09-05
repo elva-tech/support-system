@@ -17,6 +17,12 @@ export class UserService {
     return this.http.get<ApiResponse<User>>(`${this.baseUrl}/${id}`);
   }
 
+  /** Invite staff (no password). Preferred over create. */
+  invite(payload: Record<string, unknown>): Observable<ApiResponse<User>> {
+    return this.http.post<ApiResponse<User>>(`${this.baseUrl}/invite`, payload);
+  }
+
+  /** @deprecated Prefer invite() — same secure invitation flow. */
   create(payload: Record<string, unknown>): Observable<ApiResponse<User>> {
     return this.http.post<ApiResponse<User>>(this.baseUrl, payload);
   }
@@ -27,5 +33,25 @@ export class UserService {
 
   delete(id: string): Observable<{ message: string }> {
     return this.http.delete<{ message: string }>(`${this.baseUrl}/${id}`);
+  }
+
+  resendInvitation(id: string): Observable<ApiResponse<User>> {
+    return this.http.post<ApiResponse<User>>(`${this.baseUrl}/${id}/resend-invitation`, {});
+  }
+
+  revokeInvitation(id: string): Observable<ApiResponse<User>> {
+    return this.http.post<ApiResponse<User>>(`${this.baseUrl}/${id}/revoke-invitation`, {});
+  }
+
+  suspend(id: string): Observable<ApiResponse<User>> {
+    return this.http.post<ApiResponse<User>>(`${this.baseUrl}/${id}/suspend`, {});
+  }
+
+  reactivate(id: string): Observable<ApiResponse<User>> {
+    return this.http.post<ApiResponse<User>>(`${this.baseUrl}/${id}/reactivate`, {});
+  }
+
+  deactivate(id: string): Observable<ApiResponse<User>> {
+    return this.http.post<ApiResponse<User>>(`${this.baseUrl}/${id}/deactivate`, {});
   }
 }

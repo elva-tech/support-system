@@ -1,5 +1,9 @@
 const asyncHandler = require("../../shared/utils/asyncHandler");
 const provisioningService = require("./tenant-provisioning.service");
+const staffInvitationService = require("../staff-invitations/staff-invitation.service");
+const TenantAdminInvitation = require("./tenant-admin-invitation.model");
+const StaffInvitation = require("../staff-invitations/staff-invitation.model");
+const { hashInvitationToken } = require("./invitation-token.util");
 
 const provisionTenant = asyncHandler(async (req, res) => {
   const data = await provisioningService.provisionTenant(req.body, {
@@ -40,12 +44,47 @@ const resendInvitation = asyncHandler(async (req, res) => {
   res.json({ message: "Invitation resent", data });
 });
 
+/**
+ * Public: validate invitation — tenant-admin (Phase 6) or staff (Phase 10).
+ * Never reveals which email/token type failed.
+ */
 const getInvitation = asyncHandler(async (req, res) => {
-  const data = await provisioningService.validateInvitationToken(req.params.token);
-  res.json({ data });
+  const adminInvite = await provisioningService.validateInvitationToken(req.params.token);
+  if (adminInvite.valid) {
+    return res.json({ data: adminInvite });
+  }
+
+  const staffInvite = await staffInvitationService.validateStaffInvitationToken(req.params.token);
+  res.json({ data: staffInvite });
 });
 
+/**
+ * Public: complete setup for either invitation type (route by hashed token ownership).
+ */
 const completeSetup = asyncHandler(async (req, res) => {
+  const rawToken = req.body?.token;
+  if (rawToken && String(rawToken).length >= 16) {
+    const tokenHash = hashInvitationToken(rawToken);
+    const staffInvite = await StaffInvitation.findOne({ tokenHash }).select("_id");
+    if (staffInvite) {
+      const data = await staffInvitationService.completeStaffAccountSetup(req.body);
+      return res.json({
+        message: "Account setup complete. You can now sign in.",
+        data
+      });
+    }
+
+    const adminInvite = await TenantAdminInvitation.findOne({ tokenHash }).select("_id");
+    if (adminInvite) {
+      const data = await provisioningService.completeAccountSetup(req.body);
+      return res.json({
+        message: "Account setup complete. You can now sign in.",
+        data
+      });
+    }
+  }
+
+  // Generic failure path (no token leak)
   const data = await provisioningService.completeAccountSetup(req.body);
   res.json({
     message: "Account setup complete. You can now sign in.",

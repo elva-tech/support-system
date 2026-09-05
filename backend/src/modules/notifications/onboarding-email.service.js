@@ -2,10 +2,12 @@ const notificationManager = require("./notification-manager.service");
 const Team = require("../teams/team.model");
 const env = require("../../config/env");
 const logger = require("../../shared/utils/logger");
+const { buildEmailBranding } = require("../../shared/utils/tenant-ops.util");
 const {
   renderStaffWelcomeEmail,
   renderStaffPasswordUpdatedEmail,
-  renderMerchantWelcomeEmail
+  renderMerchantWelcomeEmail,
+  renderStaffInvitationEmail
 } = require("./email-templates");
 
 const sendEmail = async ({ to, subject, html }) => {
@@ -63,6 +65,33 @@ const sendStaffPasswordUpdatedEmail = async (user, plainPassword) =>
     })
   });
 
+const sendStaffInvitationEmail = async ({
+  user,
+  tenant,
+  invitationUrl,
+  workspaceUrl,
+  expiryHours
+}) => {
+  const branding = buildEmailBranding(tenant);
+  const inviteeName = `${user.firstName} ${user.lastName}`.replace(/ -$/, "").trim();
+  const orgName = tenant?.name || branding.tenantName;
+
+  return sendEmail({
+    to: user.email,
+    subject: `You're invited to ${orgName} Support`,
+    html: renderStaffInvitationEmail({
+      inviteeName,
+      tenantName: orgName,
+      workspaceUrl,
+      invitationUrl,
+      role: user.role,
+      expiryHours,
+      supportEmail: env.email.supportAddress,
+      branding
+    })
+  });
+};
+
 const sendMerchantWelcomeEmail = async (merchant, application) => {
   const appName = application?.name || merchant.applicationCode || "your application";
 
@@ -81,5 +110,6 @@ const sendMerchantWelcomeEmail = async (merchant, application) => {
 module.exports = {
   sendStaffWelcomeEmail,
   sendStaffPasswordUpdatedEmail,
+  sendStaffInvitationEmail,
   sendMerchantWelcomeEmail
 };

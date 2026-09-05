@@ -12,11 +12,17 @@ const {
 const validate = require("../../shared/middleware/validate.middleware");
 const authenticate = require("../../shared/middleware/auth.middleware");
 const authorize = require("../../shared/middleware/role.middleware");
+const {
+  requireTenantContext,
+  requireTenantMembership
+} = require("../../shared/middleware/tenant-context.middleware");
 const { ROLES } = require("../../shared/constants/roles");
 
 const router = express.Router();
 
 router.use(authenticate);
+router.use(requireTenantContext);
+router.use(requireTenantMembership);
 
 router.post(
   "/classify",

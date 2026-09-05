@@ -34,9 +34,14 @@ describe("Inbound Mail Queue", () => {
     const queueItem = await InboundMailQueue.findById(inbound.body.data.queueItemId);
     expect(queueItem.status).toBe("PENDING");
 
+    // Phase 10: tenant APIs fail closed for null tenantId — stamp ownership for review
+    queueItem.tenantId = data.tenant._id;
+    await queueItem.save();
+
     const list = await request(app)
       .get("/api/inbound-mail-queue")
-      .set("Authorization", `Bearer ${adminToken}`);
+      .set("Authorization", `Bearer ${adminToken}`)
+      .set("X-Tenant-Slug", "elva");
 
     expect(list.status).toBe(200);
     expect(list.body.data.some((item) => item._id === queueItem._id.toString())).toBe(true);
@@ -44,6 +49,7 @@ describe("Inbound Mail Queue", () => {
     const assign = await request(app)
       .post(`/api/inbound-mail-queue/${queueItem._id}/assign`)
       .set("Authorization", `Bearer ${adminToken}`)
+      .set("X-Tenant-Slug", "elva")
       .send({
         teamId: data.teamA._id.toString(),
         applicationId: data.application._id.toString(),
@@ -61,6 +67,7 @@ describe("Inbound Mail Queue", () => {
 
   it("rejects unknown inbound mail with reason", async () => {
     const item = await InboundMailQueue.create({
+      tenantId: data.tenant._id,
       senderEmail: "spam@example.com",
       senderName: "Spam",
       subject: "Buy now",
@@ -71,6 +78,7 @@ describe("Inbound Mail Queue", () => {
     const reject = await request(app)
       .post(`/api/inbound-mail-queue/${item._id}/reject`)
       .set("Authorization", `Bearer ${adminToken}`)
+      .set("X-Tenant-Slug", "elva")
       .send({ reason: "This is not a support request" });
 
     expect(reject.status).toBe(200);

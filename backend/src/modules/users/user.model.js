@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const { ROLES, ALL_ROLES } = require("../../shared/constants/roles");
 const { tenantIdField } = require("../../shared/schema/tenant-id.field");
+const {
+  USER_STATUSES,
+  ALL_USER_STATUSES,
+  isActiveFlagForStatus
+} = require("../../shared/constants/user-lifecycle");
 
 const userSchema = new mongoose.Schema(
   {
@@ -44,6 +49,16 @@ const userSchema = new mongoose.Schema(
         ref: "Application"
       }
     ],
+    /**
+     * Lifecycle status (Phase 10). isActive is kept in sync for backward compatibility.
+     */
+    status: {
+      type: String,
+      enum: ALL_USER_STATUSES,
+      default: USER_STATUSES.ACTIVE,
+      required: true,
+      index: true
+    },
     isActive: {
       type: Boolean,
       default: true
@@ -68,12 +83,24 @@ const userSchema = new mongoose.Schema(
 
 /** Tenant-scoped email uniqueness (Phase 6) — replaces global email unique */
 userSchema.index({ tenantId: 1, email: 1 }, { unique: true });
+userSchema.index({ tenantId: 1, status: 1 });
 
 userSchema.virtual("fullName").get(function fullName() {
   return `${this.firstName} ${this.lastName}`;
 });
 
-userSchema.pre("save", async function hashPassword(next) {
+userSchema.pre("save", async function hashPasswordAndSyncLifecycle(next) {
+  if (this.isModified("status") && this.status) {
+    this.isActive = isActiveFlagForStatus(this.status);
+  } else if (this.isModified("isActive") && !this.isModified("status")) {
+    // Legacy clients toggling isActive only
+    if (this.isActive === true) {
+      this.status = USER_STATUSES.ACTIVE;
+    } else if (this.status === USER_STATUSES.ACTIVE || !this.status) {
+      this.status = USER_STATUSES.DEACTIVATED;
+    }
+  }
+
   if (!this.isModified("password")) {
     return next();
   }
