@@ -2,13 +2,14 @@ const NotificationEvent = require("./notification-event.model");
 const { NOTIFICATION_EVENT_TYPES } = require("./notification-event.model");
 const logger = require("../../shared/utils/logger");
 
-const createEvent = async (eventType, entityId, metadata = {}) => {
+const createEvent = async (eventType, entityId, metadata = {}, { tenantId } = {}) => {
   if (!NOTIFICATION_EVENT_TYPES.includes(eventType)) {
     return;
   }
 
   try {
     await NotificationEvent.create({
+      ...(tenantId ? { tenantId } : {}),
       eventType,
       entityId,
       processed: false,

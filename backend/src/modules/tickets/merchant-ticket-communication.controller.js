@@ -5,7 +5,9 @@ const { mapAttachmentForClient } = require("../attachments/attachment.service");
 const { SENDER_TYPES } = require("../../shared/constants/conversation-types");
 
 const merchantReply = asyncHandler(async (req, res) => {
-  await ticketService.getForMerchant(req.merchant._id, req.params.id);
+  await ticketService.getForMerchant(req.merchant._id, req.params.id, {
+    tenantId: req.merchant.tenantId || req.tenant?._id
+  });
 
   const conversation = await conversationService.addReply(req.params.id, {
     senderType: SENDER_TYPES.MERCHANT,
@@ -18,13 +20,17 @@ const merchantReply = asyncHandler(async (req, res) => {
 });
 
 const merchantTimeline = asyncHandler(async (req, res) => {
-  await ticketService.getForMerchant(req.merchant._id, req.params.id);
+  await ticketService.getForMerchant(req.merchant._id, req.params.id, {
+    tenantId: req.merchant.tenantId || req.tenant?._id
+  });
   const result = await conversationService.getTimeline(req.params.id, { includeInternalNotes: false });
   res.json({ data: result.timeline });
 });
 
 const merchantUpload = asyncHandler(async (req, res) => {
-  await ticketService.getForMerchant(req.merchant._id, req.params.id);
+  await ticketService.getForMerchant(req.merchant._id, req.params.id, {
+    tenantId: req.merchant.tenantId || req.tenant?._id
+  });
 
   const attachment = await conversationService.uploadAttachment(
     req.params.id,

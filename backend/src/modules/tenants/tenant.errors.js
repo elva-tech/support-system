@@ -34,6 +34,15 @@ const invalidTenantStatus = (status) =>
 const invalidTenantName = (detail = "Invalid tenant name") =>
   tenantError(400, TENANT_ERROR_CODES.INVALID_TENANT_NAME, detail);
 
+const tenantInactive = () =>
+  tenantError(403, TENANT_ERROR_CODES.TENANT_INACTIVE, "This workspace is not available");
+
+const tenantContextRequired = () =>
+  tenantError(400, TENANT_ERROR_CODES.TENANT_CONTEXT_REQUIRED, "Tenant context is required");
+
+const tenantAccessDenied = () =>
+  tenantError(403, TENANT_ERROR_CODES.TENANT_ACCESS_DENIED, "Access denied for this workspace");
+
 module.exports = {
   tenantError,
   tenantNotFound,
@@ -41,5 +50,8 @@ module.exports = {
   invalidTenantSlug,
   reservedTenantSlug,
   invalidTenantStatus,
-  invalidTenantName
+  invalidTenantName,
+  tenantInactive,
+  tenantContextRequired,
+  tenantAccessDenied
 };

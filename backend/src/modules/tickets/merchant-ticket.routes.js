@@ -9,10 +9,16 @@ const {
 const validate = require("../../shared/middleware/validate.middleware");
 const merchantAuthenticate = require("../../shared/middleware/merchant-auth.middleware");
 const { handleUpload } = require("../../shared/middleware/upload.middleware");
+const {
+  requireTenantContext,
+  requireMerchantTenantMembership
+} = require("../../shared/middleware/tenant-context.middleware");
 
 const router = express.Router();
 
+router.use(requireTenantContext);
 router.use(merchantAuthenticate);
+router.use(requireMerchantTenantMembership);
 
 router.get("/modules", merchantTicketController.listModules);
 router.get("/stats", merchantTicketController.getStats);

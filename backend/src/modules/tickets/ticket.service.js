@@ -30,7 +30,12 @@ const listModulesForMerchant = async (merchant) => {
     .sort({ name: 1 });
 };
 
-const createForMerchant = async (merchant, data) => {
+const createForMerchant = async (merchant, data, { tenantId } = {}) => {
+  const resolvedTenantId = merchant.tenantId || tenantId;
+  if (!resolvedTenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
+
   const moduleDoc = await Module.findOne({
     _id: data.moduleId,
     applicationId: merchant.applicationId,
@@ -45,15 +50,20 @@ const createForMerchant = async (merchant, data) => {
 
   if (data.teamId) {
     const Team = require("../teams/team.model");
-    const team = await Team.findOne({ _id: data.teamId, isActive: true });
+    const team = await Team.findOne({
+      _id: data.teamId,
+      isActive: true,
+      tenantId: resolvedTenantId
+    });
     if (!team) {
       throw new ApiError(400, "Selected team not found");
     }
   }
 
-  const ticketNumber = await generateTicketNumber(merchant.applicationCode);
+  const ticketNumber = await generateTicketNumber(merchant.applicationCode, resolvedTenantId);
 
   const ticket = await Ticket.create({
+    tenantId: resolvedTenantId,
     ticketNumber,
     applicationId: merchant.applicationId,
     applicationCode: merchant.applicationCode,
@@ -74,6 +84,7 @@ const createForMerchant = async (merchant, data) => {
     actorType: ACTOR_TYPES.MERCHANT,
     actorId: merchant._id,
     actorName: merchant.merchantName,
+    tenantId: resolvedTenantId,
     metadata: {
       ticketNumber: ticket.ticketNumber,
       subject: ticket.subject,
@@ -85,7 +96,7 @@ const createForMerchant = async (merchant, data) => {
   const { autoAssignOnCreate } = require("./ticket-auto-assign.service");
   await autoAssignOnCreate(ticket);
 
-  return Ticket.findById(ticket._id).populate(populateOptions);
+  return Ticket.findOne({ _id: ticket._id, tenantId: resolvedTenantId }).populate(populateOptions);
 };
 
 const createFromChannel = async ({
@@ -119,14 +130,24 @@ const createFromChannel = async ({
   return ticket;
 };
 
-const listForMerchant = async (merchantId) => {
-  return Ticket.find({ merchantId })
+const listForMerchant = async (merchantId, { tenantId } = {}) => {
+  const query = { merchantId };
+  if (tenantId) {
+    query.tenantId = tenantId;
+  }
+
+  return Ticket.find(query)
     .populate(populateOptions)
     .sort({ createdAt: -1 });
 };
 
-const getForMerchant = async (merchantId, ticketId) => {
-  const ticket = await Ticket.findOne({ _id: ticketId, merchantId }).populate(populateOptions);
+const getForMerchant = async (merchantId, ticketId, { tenantId } = {}) => {
+  const query = { _id: ticketId, merchantId };
+  if (tenantId) {
+    query.tenantId = tenantId;
+  }
+
+  const ticket = await Ticket.findOne(query).populate(populateOptions);
 
   if (!ticket) {
     throw new ApiError(404, "Ticket not found");
@@ -135,8 +156,13 @@ const getForMerchant = async (merchantId, ticketId) => {
   return ticket;
 };
 
-const getStatsForMerchant = async (merchantId) => {
-  const tickets = await Ticket.find({ merchantId }).select("status");
+const getStatsForMerchant = async (merchantId, { tenantId } = {}) => {
+  const query = { merchantId };
+  if (tenantId) {
+    query.tenantId = tenantId;
+  }
+
+  const tickets = await Ticket.find(query).select("status");
 
   return {
     open: tickets.filter((t) => ACTIVE_TICKET_STATUSES.includes(t.status)).length,
@@ -145,10 +171,10 @@ const getStatsForMerchant = async (merchantId) => {
   };
 };
 
-const paginateTickets = async (baseQuery, filters = {}) => {
+const paginateTickets = async (baseQuery, filters = {}, { tenantId } = {}) => {
   const { page, limit, skip } = parsePagination(filters);
   let query = buildQueueQuery(filters);
-  query = await applySearchFilter(query, filters.search);
+  query = await applySearchFilter(query, filters.search, { tenantId });
 
   const finalQuery = Object.keys(baseQuery).length
     ? { $and: [baseQuery, query] }
@@ -165,8 +191,12 @@ const paginateTickets = async (baseQuery, filters = {}) => {
   };
 };
 
-const listAll = async (user, filters = {}) => {
+const listAll = async (user, filters = {}, { tenantId } = {}) => {
   const baseQuery = {};
+  if (tenantId) {
+    baseQuery.tenantId = tenantId;
+  }
+
   const { ROLES } = require("../../shared/constants/roles");
 
   if (user.role !== ROLES.ADMIN) {
@@ -176,15 +206,23 @@ const listAll = async (user, filters = {}) => {
     baseQuery.teamId = resolveRefId(user.teamId);
   }
 
-  return paginateTickets(baseQuery, filters);
+  return paginateTickets(baseQuery, filters, { tenantId });
 };
 
-const listMyTickets = async (userId, filters = {}) => {
-  return paginateTickets({ assignedTo: userId }, filters);
+const listMyTickets = async (userId, filters = {}, { tenantId } = {}) => {
+  const baseQuery = { assignedTo: userId };
+  if (tenantId) {
+    baseQuery.tenantId = tenantId;
+  }
+  return paginateTickets(baseQuery, filters, { tenantId });
 };
 
-const listTeamTickets = async (user, filters = {}) => {
+const listTeamTickets = async (user, filters = {}, { tenantId } = {}) => {
   const baseQuery = {};
+  if (tenantId) {
+    baseQuery.tenantId = tenantId;
+  }
+
   const { ROLES } = require("../../shared/constants/roles");
 
   if (user.role !== ROLES.ADMIN) {
@@ -196,11 +234,12 @@ const listTeamTickets = async (user, filters = {}) => {
     baseQuery.teamId = filters.team;
   }
 
-  return paginateTickets(baseQuery, filters);
+  return paginateTickets(baseQuery, filters, { tenantId });
 };
 
-const getById = async (ticketId) => {
-  const ticket = await Ticket.findById(ticketId).populate(populateOptions);
+const getById = async (ticketId, { tenantId } = {}) => {
+  const query = tenantId ? { _id: ticketId, tenantId } : { _id: ticketId };
+  const ticket = await Ticket.findOne(query).populate(populateOptions);
 
   if (!ticket) {
     throw new ApiError(404, "Ticket not found");

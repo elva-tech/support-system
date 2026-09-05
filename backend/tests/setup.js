@@ -11,6 +11,9 @@ process.env.ELVA_NOTIFY_BRAND_ID = "";
 process.env.ELVA_NOTIFY_OTP_MODE = "relay";
 process.env.RATE_LIMIT_OTP_MAX = "100";
 process.env.RATE_LIMIT_LOGIN_MAX = "100";
+process.env.TENANT_DEV_DEFAULT_SLUG = "elva";
+process.env.TENANT_HEADER_OVERRIDE_ENABLED = "true";
+process.env.TENANT_BASE_DOMAIN = "elvasupport.in";
 
 const mongoose = require("mongoose");
 const { assertSafeToDrop, isSafeTestUri } = require("../src/config/db-safety");
@@ -26,6 +29,15 @@ const safeDropDatabase = async () => {
   await mongoose.connection.db.dropDatabase();
 };
 
+const syncCriticalIndexes = async () => {
+  await Promise.all([
+    require("../src/modules/applications/application.model").syncIndexes(),
+    require("../src/modules/tickets/ticket-sequence.model").syncIndexes(),
+    require("../src/modules/merchants/merchant-profile.model").syncIndexes(),
+    require("../src/modules/tenants/tenant.model").syncIndexes()
+  ]);
+};
+
 beforeAll(async () => {
   if (!isSafeTestUri(testMongoUri)) {
     throw new Error(`Tests refused to start — MONGODB_URI is not isolated: ${testMongoUri}`);
@@ -37,10 +49,12 @@ beforeAll(async () => {
 
   const { connectDatabase } = require("../src/config/database");
   await connectDatabase();
+  await syncCriticalIndexes();
 });
 
 beforeEach(async () => {
   await safeDropDatabase();
+  await syncCriticalIndexes();
 });
 
 afterAll(async () => {

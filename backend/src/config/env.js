@@ -136,5 +136,22 @@ module.exports = {
       fromName: process.env.RESEND_FROM_NAME || process.env.SMTP_FROM_NAME || "ELVA Support",
       timeoutMs: parseInt(process.env.RESEND_TIMEOUT_MS, 10) || 15000
     }
+  },
+  /**
+   * Tenant resolution (Phase 4).
+   * - TENANT_BASE_DOMAIN: apex used for subdomain parsing (e.g. elvasupport.in)
+   * - Header X-Tenant-Slug: allowed only when headerOverrideEnabled (dev/test by default)
+   * - TENANT_DEV_DEFAULT_SLUG: last-resort slug when host/header yield nothing (never in production)
+   */
+  tenant: {
+    baseDomain: (process.env.TENANT_BASE_DOMAIN || "elvasupport.in").toLowerCase().trim(),
+    headerOverrideEnabled:
+      process.env.TENANT_HEADER_OVERRIDE_ENABLED === "true" ||
+      (!isProduction && process.env.TENANT_HEADER_OVERRIDE_ENABLED !== "false"),
+    /** Reject (403) X-Tenant-Slug in production when present; never honor it. */
+    rejectHeaderInProduction: process.env.TENANT_REJECT_HEADER_IN_PRODUCTION !== "false",
+    devDefaultSlug: isProduction
+      ? ""
+      : (process.env.TENANT_DEV_DEFAULT_SLUG || "").toLowerCase().trim()
   }
 };

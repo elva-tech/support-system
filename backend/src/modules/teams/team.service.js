@@ -4,6 +4,8 @@ const Application = require("../applications/application.model");
 const Module = require("../modules/module.model");
 const User = require("../users/user.model");
 const { ROLES } = require("../../shared/constants/roles");
+const { stripClientTenantId, withTenantFilter } = require("../../shared/utils/tenant-scope.util");
+
 const populateOptions = [
   { path: "applicationId", select: "name code" },
   { path: "moduleIds", select: "name code" },
@@ -19,7 +21,7 @@ const normalizeId = (id) => {
 
 const normalizeIds = (ids = []) => ids.map(normalizeId).filter(Boolean);
 
-const excludeAdminsFromTeamUsers = async ({ teamLeadId, memberIds = [] }) => {
+const excludeAdminsFromTeamUsers = async ({ teamLeadId, memberIds = [] }, { tenantId } = {}) => {
   const candidateIds = [
     ...normalizeIds(memberIds),
     ...(teamLeadId ? [normalizeId(teamLeadId)] : [])
@@ -30,10 +32,12 @@ const excludeAdminsFromTeamUsers = async ({ teamLeadId, memberIds = [] }) => {
     return { teamLeadId: null, memberIds: [] };
   }
 
-  const staffUsers = await User.find({
-    _id: { $in: uniqueIds },
-    role: { $ne: ROLES.ADMIN }
-  }).select("_id");
+  const staffUsers = await User.find(
+    withTenantFilter(tenantId, {
+      _id: { $in: uniqueIds },
+      role: { $ne: ROLES.ADMIN }
+    })
+  ).select("_id");
 
   const staffSet = new Set(staffUsers.map((u) => u._id.toString()));
   const leadId = teamLeadId ? normalizeId(teamLeadId) : null;
@@ -62,17 +66,31 @@ const withStaffOnly = (team) => {
 
   return team;
 };
-const validateReferences = async ({ applicationId, moduleIds, teamLeadId, memberIds }) => {
+
+const validateReferences = async (
+  { applicationId, moduleIds, teamLeadId, memberIds },
+  { tenantId } = {}
+) => {
   if (applicationId) {
-    const application = await Application.findById(applicationId);
+    const application = await Application.findOne(
+      withTenantFilter(tenantId, { _id: applicationId })
+    );
     if (!application) {
       throw new ApiError(400, "Application not found");
     }
   }
 
   if (moduleIds?.length) {
+    // Module has no tenantId yet — scope via parent application within tenant
     const modules = await Module.find({ _id: { $in: moduleIds } });
     if (modules.length !== moduleIds.length) {
+      throw new ApiError(400, "One or more modules not found");
+    }
+    const applicationIds = [...new Set(modules.map((m) => m.applicationId.toString()))];
+    const applications = await Application.find(
+      withTenantFilter(tenantId, { _id: { $in: applicationIds } })
+    );
+    if (applications.length !== applicationIds.length) {
       throw new ApiError(400, "One or more modules not found");
     }
   }
@@ -83,15 +101,15 @@ const validateReferences = async ({ applicationId, moduleIds, teamLeadId, member
   }
 
   if (userIds.length) {
-    const users = await User.find({ _id: { $in: userIds } });
+    const users = await User.find(withTenantFilter(tenantId, { _id: { $in: userIds } }));
     if (users.length !== userIds.length) {
       throw new ApiError(400, "One or more users not found");
     }
   }
 };
 
-const list = async (filters = {}) => {
-  const query = {};
+const list = async (filters = {}, { tenantId } = {}) => {
+  const query = withTenantFilter(tenantId);
 
   if (filters.applicationId) {
     query.applicationId = filters.applicationId;
@@ -107,8 +125,9 @@ const list = async (filters = {}) => {
 
   return Team.find(query).populate(populateOptions).sort({ name: 1 }).then((teams) => teams.map(withStaffOnly));
 };
-const getById = async (id) => {
-  const team = await Team.findById(id).populate(populateOptions);
+
+const getById = async (id, { tenantId } = {}) => {
+  const team = await Team.findOne(withTenantFilter(tenantId, { _id: id })).populate(populateOptions);
 
   if (!team) {
     throw new ApiError(404, "Team not found");
@@ -125,69 +144,90 @@ const buildTeamMemberIds = (teamLeadId, memberIds) => {
   return ids;
 };
 
-const create = async (data) => {
-  await validateReferences(data);
+const create = async (data, { tenantId } = {}) => {
+  if (!tenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
 
-  const sanitized = await excludeAdminsFromTeamUsers({
-    teamLeadId: data.teamLeadId,
-    memberIds: data.memberIds
-  });
+  const payload = stripClientTenantId(data);
+  await validateReferences(payload, { tenantId });
+
+  const sanitized = await excludeAdminsFromTeamUsers(
+    {
+      teamLeadId: payload.teamLeadId,
+      memberIds: payload.memberIds
+    },
+    { tenantId }
+  );
   const memberIds = buildTeamMemberIds(sanitized.teamLeadId, sanitized.memberIds);
 
   const team = await Team.create({
-    ...data,
+    ...payload,
+    tenantId,
     moduleIds: [],
     teamLeadId: sanitized.teamLeadId,
     memberIds
   });
-  await syncUsersTeamAssignment(team._id, memberIds, sanitized.teamLeadId);
+  await syncUsersTeamAssignment(team._id, memberIds, sanitized.teamLeadId, { tenantId });
 
-  return withStaffOnly(await Team.findById(team._id).populate(populateOptions));
+  return withStaffOnly(
+    await Team.findOne(withTenantFilter(tenantId, { _id: team._id })).populate(populateOptions)
+  );
 };
 
-const update = async (id, data) => {
-  const team = await Team.findById(id).populate(populateOptions);
+const update = async (id, data, { tenantId } = {}) => {
+  const team = await Team.findOne(withTenantFilter(tenantId, { _id: id })).populate(populateOptions);
 
   if (!team) {
     throw new ApiError(404, "Team not found");
   }
 
-  await validateReferences({ ...team.toObject(), ...data });
+  const payload = stripClientTenantId(data);
+  await validateReferences({ ...team.toObject(), ...payload }, { tenantId });
 
-  const sanitized = await excludeAdminsFromTeamUsers({
-    teamLeadId: data.teamLeadId !== undefined ? data.teamLeadId : team.teamLeadId,
-    memberIds: data.memberIds !== undefined ? data.memberIds : team.memberIds
-  });
+  const sanitized = await excludeAdminsFromTeamUsers(
+    {
+      teamLeadId: payload.teamLeadId !== undefined ? payload.teamLeadId : team.teamLeadId,
+      memberIds: payload.memberIds !== undefined ? payload.memberIds : team.memberIds
+    },
+    { tenantId }
+  );
   const memberIds = buildTeamMemberIds(sanitized.teamLeadId, sanitized.memberIds);
 
-  Object.assign(team, data, {
+  Object.assign(team, payload, {
     teamLeadId: sanitized.teamLeadId,
     memberIds
   });
   await team.save();
 
-  await syncUsersTeamAssignment(team._id, memberIds, sanitized.teamLeadId);
+  await syncUsersTeamAssignment(team._id, memberIds, sanitized.teamLeadId, { tenantId });
 
-  return withStaffOnly(await Team.findById(id).populate(populateOptions));
+  return withStaffOnly(
+    await Team.findOne(withTenantFilter(tenantId, { _id: id })).populate(populateOptions)
+  );
 };
-const remove = async (id) => {
-  const team = await getById(id);
+
+const remove = async (id, { tenantId } = {}) => {
+  const team = await getById(id, { tenantId });
   await team.deleteOne();
   return team;
 };
 
-const syncUsersTeamAssignment = async (teamId, memberIds = [], teamLeadId = null) => {
+const syncUsersTeamAssignment = async (teamId, memberIds = [], teamLeadId = null, { tenantId } = {}) => {
   const userIds = [...new Set([...normalizeIds(memberIds), ...(teamLeadId ? [normalizeId(teamLeadId)] : [])])];
 
   if (!userIds.length) return;
 
-  const staffUsers = await User.find({
-    _id: { $in: userIds },
-    role: { $ne: ROLES.ADMIN }
-  }).select("_id");
+  const staffUsers = await User.find(
+    withTenantFilter(tenantId, {
+      _id: { $in: userIds },
+      role: { $ne: ROLES.ADMIN }
+    })
+  ).select("_id");
 
   for (const user of staffUsers) {
-    await User.findByIdAndUpdate(user._id, { teamId });
+    await User.findOneAndUpdate(withTenantFilter(tenantId, { _id: user._id }), { teamId });
   }
 };
+
 module.exports = { list, getById, create, update, remove };

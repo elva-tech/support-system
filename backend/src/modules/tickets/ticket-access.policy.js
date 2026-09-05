@@ -29,8 +29,10 @@ const canAccess = (user, ticket) => {
   return false;
 };
 
-const assertAccess = async (user, ticketId) => {
-  const ticket = await Ticket.findById(ticketId);
+const assertAccess = async (user, ticketId, { tenantId } = {}) => {
+  const ticket = tenantId
+    ? await Ticket.findOne({ _id: ticketId, tenantId })
+    : await Ticket.findById(ticketId);
 
   if (!ticket) {
     throw new ApiError(404, "Ticket not found");

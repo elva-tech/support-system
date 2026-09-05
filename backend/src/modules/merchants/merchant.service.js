@@ -11,6 +11,7 @@ const { usesElvaNotifyNativeOtp } = require("../notifications/elva-notify.config
 const onboardingEmail = require("../notifications/onboarding-email.service");
 const logger = require("../../shared/utils/logger");
 const { resolveTenantIdForApplication } = require("../tenants/resolve-tenant-id");
+const { stripClientTenantId, withTenantFilter } = require("../../shared/utils/tenant-scope.util");
 
 const OTP_EXPIRY_MS = env.otpExpiresMinutes * 60 * 1000;
 const OTP_VERIFY_FAILURE_MESSAGE = "Invalid email or OTP code";
@@ -27,8 +28,13 @@ const otpNotSentResponse = (message) => ({
   message
 });
 
-const findActiveMerchantByEmail = async (email, { silent = false } = {}) => {
-  const merchant = await MerchantProfile.findOne({ email: email.toLowerCase() });
+const findActiveMerchantByEmail = async (email, { tenantId, silent = false } = {}) => {
+  const filter = { email: email.toLowerCase() };
+  if (tenantId) {
+    filter.tenantId = tenantId;
+  }
+
+  const merchant = await MerchantProfile.findOne(filter);
 
   if (!merchant) {
     if (silent) {
@@ -47,7 +53,7 @@ const findActiveMerchantByEmail = async (email, { silent = false } = {}) => {
   return merchant;
 };
 
-const requestOtp = async (email) => {
+const requestOtp = async (email, { tenantId } = {}) => {
   const normalizedEmail = email.toLowerCase();
 
   const lockedSession = await OtpSession.findOne({
@@ -61,7 +67,7 @@ const requestOtp = async (email) => {
     );
   }
 
-  const merchant = await findActiveMerchantByEmail(normalizedEmail, { silent: true });
+  const merchant = await findActiveMerchantByEmail(normalizedEmail, { tenantId, silent: true });
   if (!merchant) {
     logger.info("OTP not sent — no active merchant profile for email", { email: normalizedEmail });
     return otpNotSentResponse(
@@ -120,10 +126,10 @@ const requestOtp = async (email) => {
   });
 };
 
-const verifyOtp = async (email, otpCode, sessionMeta = {}) => {
+const verifyOtp = async (email, otpCode, sessionMeta = {}, { tenantId } = {}) => {
   const normalizedEmail = email.toLowerCase();
 
-  const merchant = await findActiveMerchantByEmail(normalizedEmail, { silent: true });
+  const merchant = await findActiveMerchantByEmail(normalizedEmail, { tenantId, silent: true });
   if (!merchant) {
     throw new ApiError(400, OTP_VERIFY_FAILURE_MESSAGE);
   }
@@ -179,7 +185,7 @@ const verifyOtp = async (email, otpCode, sessionMeta = {}) => {
   const expiresAt = new Date(Date.now() + env.merchantSessionExpiresMs);
 
   await MerchantSession.create({
-    tenantId: merchant.tenantId || null,
+    tenantId: merchant.tenantId || tenantId || null,
     merchantId: merchant._id,
     sessionToken: hashValue(sessionToken),
     expiresAt,
@@ -252,44 +258,57 @@ const validateSession = async (sessionToken, sessionMeta = {}) => {
   return session.merchantId;
 };
 
-const syncMerchant = async (data) => {
-  const application = await Application.findOne({
-    code: data.applicationCode.toUpperCase(),
-    isActive: true
-  });
+const syncMerchant = async (data, { tenantId: contextTenantId } = {}) => {
+  const payload = stripClientTenantId(data);
 
-  if (!application) {
-    throw new ApiError(400, `Application not found: ${data.applicationCode}`);
+  const applicationFilter = {
+    code: payload.applicationCode.toUpperCase(),
+    isActive: true
+  };
+  if (contextTenantId) {
+    applicationFilter.tenantId = contextTenantId;
   }
 
-  const email = data.email.toLowerCase();
-  const existingByEmail = await MerchantProfile.findOne({ email });
+  const application = await Application.findOne(applicationFilter);
+
+  if (!application) {
+    throw new ApiError(400, `Application not found: ${payload.applicationCode}`);
+  }
+
+  const email = payload.email.toLowerCase();
+  const emailFilter = { email };
+  if (contextTenantId || application.tenantId) {
+    emailFilter.tenantId = contextTenantId || application.tenantId;
+  }
+  const existingByEmail = await MerchantProfile.findOne(emailFilter);
 
   if (
     existingByEmail &&
     (existingByEmail.applicationId.toString() !== application._id.toString() ||
-      existingByEmail.externalUserId !== data.externalUserId)
+      existingByEmail.externalUserId !== payload.externalUserId)
   ) {
     throw new ApiError(409, "Email already registered to another merchant");
   }
 
-  // Phase 3: keep tenant-scoped email uniqueness coherent before request isolation exists.
-  const tenantId = await resolveTenantIdForApplication(application);
+  const tenantId =
+    contextTenantId ||
+    existingByEmail?.tenantId ||
+    (await resolveTenantIdForApplication(application));
 
   const merchant = await MerchantProfile.findOneAndUpdate(
     {
       applicationId: application._id,
-      externalUserId: data.externalUserId
+      externalUserId: payload.externalUserId
     },
     {
       tenantId,
       applicationId: application._id,
       applicationCode: application.code,
-      externalUserId: data.externalUserId,
-      merchantName: data.merchantName,
+      externalUserId: payload.externalUserId,
+      merchantName: payload.merchantName,
       email,
-      phone: data.phone || "",
-      isActive: data.isActive !== undefined ? data.isActive : true
+      phone: payload.phone || "",
+      isActive: payload.isActive !== undefined ? payload.isActive : true
     },
     { new: true, upsert: true, runValidators: true }
   ).populate("applicationId", "name code");
@@ -299,8 +318,8 @@ const syncMerchant = async (data) => {
 
 const merchantPopulate = [{ path: "applicationId", select: "name code" }];
 
-const listMerchants = async (filters = {}) => {
-  const query = {};
+const listMerchants = async (filters = {}, { tenantId } = {}) => {
+  const query = withTenantFilter(tenantId);
 
   if (filters.applicationId) {
     query.applicationId = filters.applicationId;
@@ -318,8 +337,17 @@ const listMerchants = async (filters = {}) => {
 
 const buildExternalUserId = (email) => `portal-${email.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 
-const createByAdmin = async ({ applicationId, email, merchantName, phone, isActive = true }) => {
-  const application = await Application.findById(applicationId);
+const createByAdmin = async (
+  { applicationId, email, merchantName, phone, isActive = true },
+  { tenantId } = {}
+) => {
+  if (!tenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
+
+  const application = await Application.findOne(
+    withTenantFilter(tenantId, { _id: applicationId })
+  );
 
   if (!application || !application.isActive) {
     throw new ApiError(400, "Invalid or inactive application");
@@ -332,29 +360,40 @@ const createByAdmin = async ({ applicationId, email, merchantName, phone, isActi
     throw new ApiError(409, "A merchant with this email already exists");
   }
 
-  const merchant = await syncMerchant({
-    applicationCode: application.code,
-    externalUserId: buildExternalUserId(normalizedEmail),
-    merchantName: merchantName?.trim() || normalizedEmail.split("@")[0],
-    email: normalizedEmail,
-    phone: phone || "",
-    isActive
-  });
+  const merchant = await syncMerchant(
+    {
+      applicationCode: application.code,
+      externalUserId: buildExternalUserId(normalizedEmail),
+      merchantName: merchantName?.trim() || normalizedEmail.split("@")[0],
+      email: normalizedEmail,
+      phone: phone || "",
+      isActive
+    },
+    { tenantId }
+  );
 
   await onboardingEmail.sendMerchantWelcomeEmail(merchant, application);
 
   return merchant;
 };
 
-const updateByAdmin = async (id, data) => {
-  const merchant = await MerchantProfile.findById(id);
+const updateByAdmin = async (id, data, { tenantId } = {}) => {
+  if (!tenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
+
+  const merchant = await MerchantProfile.findOne(withTenantFilter(tenantId, { _id: id }));
 
   if (!merchant) {
     throw new ApiError(404, "Merchant not found");
   }
 
-  if (data.applicationId && data.applicationId !== merchant.applicationId.toString()) {
-    const application = await Application.findById(data.applicationId);
+  const payload = stripClientTenantId(data);
+
+  if (payload.applicationId && payload.applicationId !== merchant.applicationId.toString()) {
+    const application = await Application.findOne(
+      withTenantFilter(tenantId, { _id: payload.applicationId })
+    );
 
     if (!application || !application.isActive) {
       throw new ApiError(400, "Invalid or inactive application");
@@ -364,8 +403,8 @@ const updateByAdmin = async (id, data) => {
     merchant.applicationCode = application.code;
   }
 
-  if (data.email && data.email.toLowerCase() !== merchant.email) {
-    const normalizedEmail = data.email.toLowerCase();
+  if (payload.email && payload.email.toLowerCase() !== merchant.email) {
+    const normalizedEmail = payload.email.toLowerCase();
     const existing = await MerchantProfile.findOne({ email: normalizedEmail });
 
     if (existing) {
@@ -376,20 +415,20 @@ const updateByAdmin = async (id, data) => {
     merchant.externalUserId = buildExternalUserId(normalizedEmail);
   }
 
-  if (data.merchantName !== undefined) {
-    merchant.merchantName = data.merchantName.trim();
+  if (payload.merchantName !== undefined) {
+    merchant.merchantName = payload.merchantName.trim();
   }
 
-  if (data.phone !== undefined) {
-    merchant.phone = data.phone;
+  if (payload.phone !== undefined) {
+    merchant.phone = payload.phone;
   }
 
-  if (data.isActive !== undefined) {
-    merchant.isActive = data.isActive;
+  if (payload.isActive !== undefined) {
+    merchant.isActive = payload.isActive;
   }
 
   await merchant.save();
-  return MerchantProfile.findById(id).populate(merchantPopulate);
+  return MerchantProfile.findOne(withTenantFilter(tenantId, { _id: id })).populate(merchantPopulate);
 };
 
 module.exports = {

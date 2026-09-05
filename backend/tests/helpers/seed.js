@@ -7,6 +7,7 @@ const Ticket = require("../../src/modules/tickets/ticket.model");
 const Attachment = require("../../src/modules/attachments/attachment.model");
 const ApplicationProfile = require("../../src/modules/classification/application-profile.model");
 const merchantService = require("../../src/modules/merchants/merchant.service");
+const tenantService = require("../../src/modules/tenants/tenant.service");
 const { ROLES } = require("../../src/shared/constants/roles");
 const { TICKET_STATUSES } = require("../../src/shared/constants/ticket-statuses");
 const fs = require("fs");
@@ -14,7 +15,11 @@ const path = require("path");
 const env = require("../../src/config/env");
 
 const seedTestData = async () => {
+  const { tenant } = await tenantService.ensureElvaTenant();
+  const tenantId = tenant._id;
+
   const application = await Application.create({
+    tenantId,
     name: "ApnaCart",
     code: "APN",
     description: "Test application",
@@ -22,6 +27,7 @@ const seedTestData = async () => {
   });
 
   const teamA = await Team.create({
+    tenantId,
     name: "Team A",
     description: "Team A",
     applicationId: application._id,
@@ -29,6 +35,7 @@ const seedTestData = async () => {
   });
 
   const teamB = await Team.create({
+    tenantId,
     name: "Team B",
     description: "Team B",
     applicationId: application._id,
@@ -45,6 +52,7 @@ const seedTestData = async () => {
   });
 
   const admin = await User.create({
+    tenantId,
     email: "admin@test.com",
     password: "Admin@12345",
     firstName: "Admin",
@@ -54,6 +62,7 @@ const seedTestData = async () => {
   });
 
   const agentA = await User.create({
+    tenantId,
     email: "agent-a@test.com",
     password: "Agent@12345",
     firstName: "Agent",
@@ -65,6 +74,7 @@ const seedTestData = async () => {
   });
 
   const agentB = await User.create({
+    tenantId,
     email: "agent-b@test.com",
     password: "Agent@12345",
     firstName: "Agent",
@@ -76,6 +86,7 @@ const seedTestData = async () => {
   });
 
   const teamLeadA = await User.create({
+    tenantId,
     email: "lead-a@test.com",
     password: "Lead@12345",
     firstName: "Lead",
@@ -86,16 +97,20 @@ const seedTestData = async () => {
     isActive: true
   });
 
-  const merchant = await merchantService.syncMerchant({
-    applicationCode: "APN",
-    externalUserId: "merchant-test-001",
-    merchantName: "Test Merchant",
-    email: "merchant@test.com",
-    phone: "+919999999999",
-    isActive: true
-  });
+  const merchant = await merchantService.syncMerchant(
+    {
+      applicationCode: "APN",
+      externalUserId: "merchant-test-001",
+      merchantName: "Test Merchant",
+      email: "merchant@test.com",
+      phone: "+919999999999",
+      isActive: true
+    },
+    { tenantId }
+  );
 
   await ApplicationProfile.create({
+    tenantId,
     applicationId: application._id,
     keywords: ["apnacart", "merchant", "order", "apn"],
     modules: [
@@ -108,6 +123,7 @@ const seedTestData = async () => {
   });
 
   const ticketA = await Ticket.create({
+    tenantId,
     ticketNumber: "APN-2026-900001",
     applicationId: application._id,
     applicationCode: "APN",
@@ -120,6 +136,7 @@ const seedTestData = async () => {
   });
 
   const ticketB = await Ticket.create({
+    tenantId,
     ticketNumber: "APN-2026-900002",
     applicationId: application._id,
     applicationCode: "APN",
@@ -148,6 +165,8 @@ const seedTestData = async () => {
   });
 
   return {
+    tenant,
+    tenantId,
     application,
     teamA,
     teamB,

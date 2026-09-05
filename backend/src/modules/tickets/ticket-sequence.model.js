@@ -23,9 +23,7 @@ const ticketSequenceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Legacy uniqueness — kept so generateTicketNumber({ applicationCode, year }) still works.
-ticketSequenceSchema.index({ applicationCode: 1, year: 1 }, { unique: true });
-// Future tenant-aware uniqueness (Phase 3+).
+// Tenant-aware uniqueness (Phase 4). Legacy applicationCode+year unique is dropped by migration.
 ticketSequenceSchema.index({ tenantId: 1, applicationCode: 1, year: 1 }, { unique: true });
 
 module.exports = mongoose.model("TicketSequence", ticketSequenceSchema);

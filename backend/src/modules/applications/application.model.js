@@ -12,9 +12,9 @@ const applicationSchema = new mongoose.Schema(
     code: {
       type: String,
       required: true,
-      unique: true,
       uppercase: true,
       trim: true
+      // Uniqueness is tenant-scoped: { tenantId: 1, code: 1 }
     },
     description: {
       type: String,
@@ -28,5 +28,7 @@ const applicationSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+applicationSchema.index({ tenantId: 1, code: 1 }, { unique: true });
 
 module.exports = mongoose.model("Application", applicationSchema);

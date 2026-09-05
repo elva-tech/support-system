@@ -10,10 +10,12 @@ const logAudit = async ({
   actorId = null,
   actorName,
   metadata = {},
+  tenantId = null,
   skipNotificationEvent = false
 }) => {
   try {
     await AuditLog.create({
+      ...(tenantId ? { tenantId } : {}),
       entityType,
       entityId,
       action,
@@ -24,7 +26,7 @@ const logAudit = async ({
     });
 
     if (!skipNotificationEvent) {
-      await notificationService.createEvent(action, entityId, metadata);
+      await notificationService.createEvent(action, entityId, metadata, { tenantId });
     }
   } catch (error) {
     logger.error("Failed to write audit log", {

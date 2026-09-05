@@ -44,7 +44,7 @@ const buildQueueQuery = (filters = {}) => {
   return query;
 };
 
-const applySearchFilter = async (query, search) => {
+const applySearchFilter = async (query, search, { tenantId } = {}) => {
   const term = search?.trim();
   if (!term) {
     return query;
@@ -53,12 +53,17 @@ const applySearchFilter = async (query, search) => {
   const MerchantProfile = require("../merchants/merchant-profile.model");
   const safeTerm = escapeRegex(term);
 
-  const merchants = await MerchantProfile.find({
+  const merchantFilter = {
     $or: [
       { merchantName: { $regex: safeTerm, $options: "i" } },
       { email: { $regex: safeTerm, $options: "i" } }
     ]
-  }).select("_id");
+  };
+  if (tenantId) {
+    merchantFilter.tenantId = tenantId;
+  }
+
+  const merchants = await MerchantProfile.find(merchantFilter).select("_id");
 
   const orConditions = [
     { ticketNumber: { $regex: safeTerm, $options: "i" } },

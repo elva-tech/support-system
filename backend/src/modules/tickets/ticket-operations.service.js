@@ -2,12 +2,12 @@ const ApiError = require("../../shared/utils/ApiError");
 const resolveRefId = require("../../shared/utils/resolve-ref-id");
 const Ticket = require("./ticket.model");
 const User = require("../users/user.model");
-const Team = require("../teams/team.model");
 const ticketService = require("./ticket.service");
 const conversationService = require("../conversations/conversation.service");
 const { logAudit } = require("../audit/audit.service");
 const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/constants/audit-actions");
 const { ROLES } = require("../../shared/constants/roles");
+const { withTenantFilter } = require("../../shared/utils/tenant-scope.util");
 
 const validateAssignPermission = (user, ticket) => {
   if (![ROLES.ADMIN, ROLES.TEAM_LEAD].includes(user.role)) {
@@ -21,15 +21,22 @@ const validateAssignPermission = (user, ticket) => {
   }
 };
 
-const assignTicket = async (ticketId, userId, assigner) => {
-  const ticket = await Ticket.findById(ticketId);
+const assignTicket = async (ticketId, userId, assigner, { tenantId } = {}) => {
+  const resolvedTenantId = tenantId || assigner.tenantId;
+  const ticket = resolvedTenantId
+    ? await Ticket.findOne({ _id: ticketId, tenantId: resolvedTenantId })
+    : await Ticket.findById(ticketId);
+
   if (!ticket) {
     throw new ApiError(404, "Ticket not found");
   }
 
   validateAssignPermission(assigner, ticket);
 
-  const agent = await User.findById(userId);
+  const agentQuery = resolvedTenantId
+    ? withTenantFilter(resolvedTenantId, { _id: userId })
+    : { _id: userId };
+  const agent = await User.findOne(agentQuery);
   if (!agent || !agent.isActive) {
     throw new ApiError(400, "Agent not found");
   }
@@ -80,15 +87,20 @@ const assignTicket = async (ticketId, userId, assigner) => {
     await onAgentPotentiallyFreed(previousAssignee._id, ticket.teamId);
   }
 
-  return ticketService.getById(ticketId);
+  return ticketService.getById(ticketId, { tenantId: resolvedTenantId });
 };
 
-const getTeamAgents = async (teamId) => {
-  return User.find({
+const getTeamAgents = async (teamId, { tenantId } = {}) => {
+  const query = {
     teamId,
     role: { $in: [ROLES.AGENT, ROLES.TEAM_LEAD] },
     isActive: true
-  }).select("firstName lastName email role teamId");
+  };
+  if (tenantId) {
+    query.tenantId = tenantId;
+  }
+
+  return User.find(query).select("firstName lastName email role teamId");
 };
 
 module.exports = { assignTicket, getTeamAgents, validateAssignPermission };

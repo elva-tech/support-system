@@ -14,11 +14,17 @@ const authenticate = require("../../shared/middleware/auth.middleware");
 const authorize = require("../../shared/middleware/role.middleware");
 const requireTicketAccess = require("../../shared/middleware/require-ticket-access.middleware");
 const { handleUpload } = require("../../shared/middleware/upload.middleware");
+const {
+  requireTenantContext,
+  requireTenantMembership
+} = require("../../shared/middleware/tenant-context.middleware");
 const { ROLES } = require("../../shared/constants/roles");
 
 const router = express.Router();
 
 router.use(authenticate);
+router.use(requireTenantContext);
+router.use(requireTenantMembership);
 
 router.get("/my", ticketController.listMy);
 router.get("/team", ticketController.listTeam);
