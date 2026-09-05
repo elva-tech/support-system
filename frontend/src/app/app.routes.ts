@@ -1,27 +1,124 @@
 import { Routes } from '@angular/router';
-import { authGuard, guestGuard } from './core/guards/auth.guard';
 import { roleGuard } from './core/guards/role.guard';
+import {
+  platformAuthGuard,
+  platformGuestGuard,
+  platformPortalCanMatch,
+  platformRoleGuard,
+  tenantAuthGuard,
+  tenantGuestGuard,
+  tenantPortalCanMatch
+} from './core/guards/portal.guard';
 import { merchantAuthGuard, merchantGuestGuard } from './merchant-portal/guards/merchant-auth.guard';
 
 export const routes: Routes = [
+  // ---------- PLATFORM PORTAL (admin.elvasupport.in or localhost portalMode=platform) ----------
+  {
+    path: 'login',
+    canMatch: [platformPortalCanMatch],
+    canActivate: [platformGuestGuard],
+    loadComponent: () =>
+      import('./features/platform/pages/platform-login.component').then((m) => m.PlatformLoginComponent)
+  },
+  {
+    path: '',
+    canMatch: [platformPortalCanMatch],
+    canActivate: [platformAuthGuard],
+    loadComponent: () =>
+      import('./features/platform/layout/platform-shell.component').then((m) => m.PlatformShellComponent),
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
+      {
+        path: 'dashboard',
+        loadComponent: () =>
+          import('./features/platform/pages/platform-dashboard.component').then(
+            (m) => m.PlatformDashboardComponent
+          )
+      },
+      {
+        path: 'tenants',
+        loadComponent: () =>
+          import('./features/platform/pages/platform-tenants.component').then(
+            (m) => m.PlatformTenantsComponent
+          )
+      },
+      {
+        path: 'provision',
+        canActivate: [platformRoleGuard('PLATFORM_SUPER_ADMIN', 'PLATFORM_ADMIN')],
+        loadComponent: () =>
+          import('./features/platform/pages/platform-provision.component').then(
+            (m) => m.PlatformProvisionComponent
+          )
+      },
+      {
+        path: 'provisionings',
+        loadComponent: () =>
+          import('./features/platform/pages/platform-provisionings.component').then(
+            (m) => m.PlatformProvisioningsComponent
+          )
+      },
+      {
+        path: 'provisionings/:id',
+        loadComponent: () =>
+          import('./features/platform/pages/platform-provisioning-detail.component').then(
+            (m) => m.PlatformProvisioningDetailComponent
+          )
+      },
+      {
+        path: 'admins',
+        canActivate: [platformRoleGuard('PLATFORM_SUPER_ADMIN', 'PLATFORM_ADMIN')],
+        loadComponent: () =>
+          import('./features/platform/pages/platform-admins.component').then(
+            (m) => m.PlatformAdminsComponent
+          )
+      },
+      {
+        path: 'audit',
+        canActivate: [platformRoleGuard('PLATFORM_SUPER_ADMIN', 'PLATFORM_ADMIN')],
+        loadComponent: () =>
+          import('./features/platform/pages/platform-audit.component').then(
+            (m) => m.PlatformAuditComponent
+          )
+      },
+      {
+        path: 'profile',
+        loadComponent: () =>
+          import('./features/platform/pages/platform-profile.component').then(
+            (m) => m.PlatformProfileComponent
+          )
+      }
+    ]
+  },
+
+  // ---------- TENANT WORKSPACE ({slug}.elvasupport.in / localhost) ----------
   {
     path: '',
     pathMatch: 'full',
+    canMatch: [tenantPortalCanMatch],
     loadComponent: () => import('./pages/landing/landing.component').then((m) => m.LandingComponent)
   },
   {
     path: 'login',
-    redirectTo: 'merchant/login',
+    canMatch: [tenantPortalCanMatch],
+    redirectTo: 'auth/login',
     pathMatch: 'full'
   },
   {
+    path: 'setup-account',
+    canMatch: [tenantPortalCanMatch],
+    loadComponent: () =>
+      import('./features/onboarding/setup-account.component').then((m) => m.SetupAccountComponent)
+  },
+  {
     path: 'merchant/login',
+    canMatch: [tenantPortalCanMatch],
     canActivate: [merchantGuestGuard],
     loadComponent: () =>
       import('./merchant-portal/pages/login/merchant-login.component').then((m) => m.MerchantLoginComponent)
   },
   {
     path: 'merchant/verify-otp',
+    canMatch: [tenantPortalCanMatch],
     canActivate: [merchantGuestGuard],
     loadComponent: () =>
       import('./merchant-portal/pages/verify-otp/merchant-verify-otp.component').then(
@@ -30,6 +127,7 @@ export const routes: Routes = [
   },
   {
     path: 'merchant',
+    canMatch: [tenantPortalCanMatch],
     canActivate: [merchantAuthGuard],
     loadComponent: () =>
       import('./merchant-portal/layout/merchant-shell.component').then((m) => m.MerchantShellComponent),
@@ -67,12 +165,14 @@ export const routes: Routes = [
   },
   {
     path: 'auth/login',
-    canActivate: [guestGuard],
+    canMatch: [tenantPortalCanMatch],
+    canActivate: [tenantGuestGuard],
     loadComponent: () => import('./features/auth/login/login.component').then((m) => m.LoginComponent)
   },
   {
     path: '',
-    canActivate: [authGuard],
+    canMatch: [tenantPortalCanMatch],
+    canActivate: [tenantAuthGuard],
     loadComponent: () => import('./layout/shell/shell.component').then((m) => m.ShellComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
@@ -109,16 +209,19 @@ export const routes: Routes = [
       },
       {
         path: 'applications',
+        canActivate: [roleGuard('ADMIN')],
         loadComponent: () =>
           import('./features/applications/applications.component').then((m) => m.ApplicationsComponent)
       },
       {
         path: 'modules',
+        canActivate: [roleGuard('ADMIN')],
         loadComponent: () =>
           import('./features/modules/modules.component').then((m) => m.ModulesComponent)
       },
       {
         path: 'teams',
+        canActivate: [roleGuard('ADMIN')],
         loadComponent: () => import('./features/teams/teams.component').then((m) => m.TeamsComponent)
       },
       {
@@ -142,5 +245,11 @@ export const routes: Routes = [
       }
     ]
   },
-  { path: '**', redirectTo: '' }
+
+  // ---------- UNKNOWN HOST ----------
+  {
+    path: '**',
+    loadComponent: () =>
+      import('./pages/invalid-portal/invalid-portal.component').then((m) => m.InvalidPortalComponent)
+  }
 ];

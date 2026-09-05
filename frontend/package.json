@@ -4,8 +4,10 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
+    "start:platform": "ng serve --configuration development",
     "build": "node scripts/write-environment.js && ng build",
-    "watch": "ng build --watch --configuration development"
+    "watch": "ng build --watch --configuration development",
+    "verify:portal": "node scripts/verify-portal-host.mjs"
   },
   "private": true,
   "dependencies": {

@@ -1,8 +1,12 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { User, UserRole } from '../models';
 
-const TOKEN_KEY = 'elva_token';
-const USER_KEY = 'elva_user';
+/** Phase 7 tenant staff token — separate from platform_access_token */
+const TENANT_TOKEN_KEY = 'tenant_access_token';
+const TENANT_USER_KEY = 'tenant_user';
+/** Legacy keys from pre-Phase-7 staff portal */
+const LEGACY_TOKEN_KEY = 'elva_token';
+const LEGACY_USER_KEY = 'elva_user';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -20,20 +24,24 @@ export class AuthService {
   });
 
   setSession(token: string, user: User): void {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    localStorage.setItem(TENANT_TOKEN_KEY, token);
+    localStorage.setItem(TENANT_USER_KEY, JSON.stringify(user));
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+    localStorage.removeItem(LEGACY_USER_KEY);
     this.tokenSignal.set(token);
     this.userSignal.set(user);
   }
 
   updateUser(user: User): void {
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    localStorage.setItem(TENANT_USER_KEY, JSON.stringify(user));
     this.userSignal.set(user);
   }
 
   logout(): void {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    localStorage.removeItem(TENANT_TOKEN_KEY);
+    localStorage.removeItem(TENANT_USER_KEY);
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+    localStorage.removeItem(LEGACY_USER_KEY);
     this.tokenSignal.set(null);
     this.userSignal.set(null);
   }
@@ -44,11 +52,11 @@ export class AuthService {
   }
 
   private readToken(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
+    return localStorage.getItem(TENANT_TOKEN_KEY) || localStorage.getItem(LEGACY_TOKEN_KEY);
   }
 
   private readUser(): User | null {
-    const raw = localStorage.getItem(USER_KEY);
+    const raw = localStorage.getItem(TENANT_USER_KEY) || localStorage.getItem(LEGACY_USER_KEY);
     if (!raw) return null;
     try {
       return JSON.parse(raw) as User;

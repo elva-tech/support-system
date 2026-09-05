@@ -3,13 +3,16 @@ import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, EMPTY, throwError } from 'rxjs';
 import { AuthService } from '../services/auth.service';
-import { isMerchantPortalApi } from '../utils/api-path.util';
+import { PlatformAuthService } from '../services/platform-auth.service';
+import { isMerchantPortalApi, isOnboardingApi, isPlatformApi } from '../utils/api-path.util';
 import { MerchantAuthService } from '../../merchant-portal/services/merchant-auth.service';
 
 const AUTH_EXEMPT_PATHS = [
   '/api/auth/login',
+  '/api/platform/auth/login',
   '/api/merchant/request-otp',
-  '/api/merchant/verify-otp'
+  '/api/merchant/verify-otp',
+  '/api/onboarding/'
 ];
 
 let redirectInProgress = false;
@@ -26,6 +29,25 @@ const redirectStaffToLogin = (router: Router, auth: AuthService): void => {
 
   router
     .navigate(['/auth/login'], {
+      queryParams: {
+        ...(email ? { email } : {}),
+        session: 'expired'
+      }
+    })
+    .finally(() => {
+      redirectInProgress = false;
+    });
+};
+
+const redirectPlatformToLogin = (router: Router, platformAuth: PlatformAuthService): void => {
+  if (redirectInProgress) return;
+
+  const email = platformAuth.currentAdmin()?.email;
+  redirectInProgress = true;
+  platformAuth.logout();
+
+  router
+    .navigate(['/login'], {
       queryParams: {
         ...(email ? { email } : {}),
         session: 'expired'
@@ -58,6 +80,7 @@ const redirectMerchantToLogin = (router: Router, merchantAuth: MerchantAuthServi
 export const sessionExpiredInterceptor: HttpInterceptorFn = (req, next) => {
   const router = inject(Router);
   const auth = inject(AuthService);
+  const platformAuth = inject(PlatformAuthService);
   const merchantAuth = inject(MerchantAuthService);
 
   return next(req).pipe(
@@ -66,11 +89,20 @@ export const sessionExpiredInterceptor: HttpInterceptorFn = (req, next) => {
         return throwError(() => error);
       }
 
-      if (isExempt(req.url)) {
+      if (isExempt(req.url) || isOnboardingApi(req.url)) {
         return throwError(() => error);
       }
 
-      const onStaffLogin = router.url.startsWith('/auth/login');
+      if (isPlatformApi(req.url)) {
+        const onPlatformLogin = router.url.startsWith('/login');
+        if (onPlatformLogin || !platformAuth.isAuthenticated()) {
+          return throwError(() => error);
+        }
+        redirectPlatformToLogin(router, platformAuth);
+        return EMPTY;
+      }
+
+      const onStaffLogin = router.url.startsWith('/auth/login') || router.url === '/login';
       const onMerchantLogin =
         router.url.startsWith('/merchant/login') || router.url.startsWith('/merchant/verify-otp');
 

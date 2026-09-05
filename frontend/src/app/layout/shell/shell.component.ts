@@ -2,6 +2,8 @@ import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../core/services/auth.service';
+import { BrandingService } from '../../core/portal/branding.service';
+import { PortalContextService } from '../../core/portal/portal-context.service';
 import { UserRole } from '../../core/models';
 import { ElvaFooterComponent } from '../../shared/components/elva-footer/elva-footer.component';
 import { ElvaHeaderComponent } from '../../shared/components/elva-header/elva-header.component';
@@ -19,7 +21,12 @@ interface NavItem {
   imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ElvaHeaderComponent, ElvaFooterComponent],
   template: `
     <div class="flex min-h-screen flex-col bg-slate-50">
-      <app-elva-header subtitle="Staff Portal" [showActionsOnMobile]="true" [compactActions]="true">
+      <app-elva-header
+        [subtitle]="headerSubtitle"
+        [tagline]="branding.branding().supportDisplayName"
+        [showActionsOnMobile]="true"
+        [compactActions]="true"
+      >
         <button
           type="button"
           class="shrink-0 rounded-lg border border-white/20 px-3 py-1.5 text-xs text-white transition hover:bg-white/10 sm:text-sm"
@@ -61,8 +68,15 @@ interface NavItem {
 })
 export class ShellComponent {
   private readonly auth = inject(AuthService);
+  readonly branding = inject(BrandingService);
+  private readonly portal = inject(PortalContextService);
 
   readonly user = this.auth.currentUser;
+
+  get headerSubtitle(): string {
+    const slug = this.portal.tenantSlug;
+    return slug ? `${slug} workspace` : 'Staff Portal';
+  }
 
   private readonly navItems: NavItem[] = [
     { label: 'Dashboard', path: '/dashboard' },

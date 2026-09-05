@@ -1,9 +1,9 @@
 /**
- * Injects API_URL into the production environment before ng build.
+ * Injects API_URL (and optional portal env) into the production environment before ng build.
  * Used on Vercel (and other CI) — local dev uses environment.ts via ng serve.
  *
  * Vercel: set API_URL=https://your-api.onrender.com/api
- * Docker/nginx: omit API_URL (defaults to same-origin /api proxy)
+ * Optional: TENANT_BASE_DOMAIN, PLATFORM_ADMIN_HOST
  */
 const fs = require('fs');
 const path = require('path');
@@ -21,10 +21,21 @@ if (normalized.startsWith('http') && !normalized.endsWith('/api')) {
   normalized = `${normalized}/api`;
   console.warn('API_URL did not end with /api — appended automatically:', normalized);
 }
+
+const tenantBaseDomain = (process.env.TENANT_BASE_DOMAIN || 'elvasupport.in').replace(/'/g, "\\'");
+const platformAdminHost = (
+  process.env.PLATFORM_ADMIN_HOST || `admin.${process.env.TENANT_BASE_DOMAIN || 'elvasupport.in'}`
+).replace(/'/g, "\\'");
+
 const outPath = path.join(__dirname, '../src/environments/environment.prod.ts');
 const content = `export const environment = {
   production: true,
-  apiUrl: '${normalized.replace(/'/g, "\\'")}'
+  apiUrl: '${normalized.replace(/'/g, "\\'")}',
+  tenantBaseDomain: '${tenantBaseDomain}',
+  platformAdminHost: '${platformAdminHost}',
+  developmentTenantSlug: '',
+  portalMode: 'auto' as 'auto' | 'platform' | 'tenant',
+  sendTenantSlugHeader: false
 };
 `;
 
