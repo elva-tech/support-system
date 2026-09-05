@@ -14,8 +14,8 @@ describe("tenant-host.util", () => {
     });
   });
 
-  test("reserved platform hosts are not tenants", () => {
-    expect(parseTenantSlugFromHostname("admin.elvasupport.in", base).kind).toBe("reserved");
+  test("reserved / platform hosts are not tenants", () => {
+    expect(parseTenantSlugFromHostname("admin.elvasupport.in", base).kind).toBe("platform");
     expect(parseTenantSlugFromHostname("www.elvasupport.in", base).kind).toBe("reserved");
     expect(parseTenantSlugFromHostname("api.elvasupport.in", base).kind).toBe("reserved");
   });
@@ -32,14 +32,25 @@ describe("tenant-host.util", () => {
     );
   });
 
-  test("extractHostname strips port and uses first forwarded host", () => {
+  test("extractHostname strips port; forwarded host only when trustProxy", () => {
     expect(extractHostname({ headers: { host: "elva.elvasupport.in:443" } })).toBe(
       "elva.elvasupport.in"
     );
     expect(
-      extractHostname({
-        headers: { "x-forwarded-host": "abc.elvasupport.in, other.example.com", host: "ignored" }
-      })
+      extractHostname(
+        {
+          headers: { "x-forwarded-host": "abc.elvasupport.in, other.example.com", host: "ignored" }
+        },
+        { trustProxy: false }
+      )
+    ).toBe("ignored");
+    expect(
+      extractHostname(
+        {
+          headers: { "x-forwarded-host": "abc.elvasupport.in, other.example.com", host: "ignored" }
+        },
+        { trustProxy: true }
+      )
     ).toBe("abc.elvasupport.in");
   });
 });

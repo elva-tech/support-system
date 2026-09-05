@@ -4,16 +4,30 @@ const {
 } = require("../constants/tenant");
 
 /**
- * Extract hostname from Host / X-Forwarded-Host (first value), strip port.
+ * Extract request hostname for tenant resolution (Phase 13).
+ *
+ * When trustProxy is enabled, prefer Express `req.hostname` (honors X-Forwarded-Host
+ * only after Express trust proxy is configured).
+ * When trustProxy is disabled, use the Host header only — never raw X-Forwarded-Host.
  */
-const extractHostname = (req) => {
-  const forwarded = req.headers["x-forwarded-host"];
-  const raw = (Array.isArray(forwarded) ? forwarded[0] : forwarded) || req.headers.host || "";
+const extractHostname = (req, { trustProxy = false } = {}) => {
+  let raw = "";
+
+  if (trustProxy && req && typeof req.hostname === "string" && req.hostname) {
+    raw = req.hostname;
+  } else if (trustProxy) {
+    // Fallback if Express hostname unavailable (unit tests)
+    const forwarded = req?.headers?.["x-forwarded-host"];
+    raw = (Array.isArray(forwarded) ? forwarded[0] : forwarded) || req?.headers?.host || "";
+  } else {
+    raw = req?.headers?.host || "";
+  }
+
   const host = String(raw).split(",")[0].trim().toLowerCase();
   if (!host) {
     return "";
   }
-  // Strip port (also handle IPv6 [::1]:3000 lightly by taking last : only if not ipv6 bracket)
+
   if (host.startsWith("[")) {
     const end = host.indexOf("]");
     return end >= 0 ? host.slice(0, end + 1) : host;
@@ -22,15 +36,17 @@ const extractHostname = (req) => {
 };
 
 /**
- * Parse tenant slug from hostname given apex base domain.
+ * Classify hostname under TENANT_BASE_DOMAIN.
  *
- * Examples (baseDomain = elvasupport.in):
- *   abc.elvasupport.in → { kind: "tenant", slug: "abc" }
- *   elva.elvasupport.in → { kind: "tenant", slug: "elva" }
- *   admin.elvasupport.in → { kind: "reserved", slug: "admin" }
- *   www.elvasupport.in → { kind: "reserved", slug: "www" }
- *   elvasupport.in → { kind: "apex" }
- *   localhost / 127.0.0.1 / api host → { kind: "local" }
+ * kinds:
+ * - tenant   → {slug}.baseDomain (operable tenant candidate)
+ * - platform → admin.baseDomain
+ * - reserved → other infrastructure subdomains (api, www, …)
+ * - apex     → bare baseDomain
+ * - local    → localhost / loopback
+ * - external → unrelated host
+ * - invalid  → multi-level subdomain or bad slug format
+ * - none     → empty
  */
 const parseTenantSlugFromHostname = (hostname, baseDomain) => {
   const host = String(hostname || "")
@@ -49,7 +65,8 @@ const parseTenantSlugFromHostname = (hostname, baseDomain) => {
     host === "localhost" ||
     host === "127.0.0.1" ||
     host === "::1" ||
-    host === "[::1]"
+    host === "[::1]" ||
+    host.endsWith(".localhost")
   ) {
     return { kind: "local", slug: null };
   }
@@ -64,14 +81,17 @@ const parseTenantSlugFromHostname = (hostname, baseDomain) => {
 
   const suffix = `.${apex}`;
   if (!host.endsWith(suffix)) {
-    // Unrelated host (e.g. Render API hostname) — not a tenant portal host
     return { kind: "external", slug: null };
   }
 
   const subdomain = host.slice(0, -suffix.length);
+  // Multi-level (foo.bar.base) is intentionally unsupported
   if (!subdomain || subdomain.includes(".")) {
-    // Multi-level or empty → not a simple tenant host
     return { kind: "invalid", slug: null };
+  }
+
+  if (subdomain === "admin") {
+    return { kind: "platform", slug: "admin" };
   }
 
   if (RESERVED_TENANT_SLUGS.includes(subdomain)) {
@@ -85,7 +105,29 @@ const parseTenantSlugFromHostname = (hostname, baseDomain) => {
   return { kind: "tenant", slug: subdomain };
 };
 
+/**
+ * Hostname from browser Origin header (Phase 13 Option B API host support).
+ * Returns null when Origin is missing or unparsable.
+ */
+const extractHostnameFromOrigin = (originHeader) => {
+  if (!originHeader || typeof originHeader !== "string") {
+    return null;
+  }
+  try {
+    const url = new URL(originHeader);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    return String(url.hostname || "")
+      .trim()
+      .toLowerCase();
+  } catch {
+    return null;
+  }
+};
+
 module.exports = {
   extractHostname,
+  extractHostnameFromOrigin,
   parseTenantSlugFromHostname
 };

@@ -10,11 +10,20 @@ export const RESERVED_TENANT_SLUGS = Object.freeze([
   'www',
   'api',
   'mail',
+  'smtp',
+  'imap',
   'support',
   'app',
   'portal',
   'static',
-  'assets'
+  'assets',
+  'cdn',
+  'status',
+  'health',
+  'docs',
+  'staging',
+  'dev',
+  'test'
 ] as const);
 
 export const TENANT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

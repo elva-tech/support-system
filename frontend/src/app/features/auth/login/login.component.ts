@@ -26,6 +26,15 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
       />
 
       <main class="flex flex-1 items-center justify-center px-4 py-8">
+        @if (branding.workspaceUnavailable()) {
+          <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
+            <h1 class="text-xl font-bold text-slate-900">Workspace unavailable</h1>
+            <p class="mt-3 text-sm text-slate-600">
+              This support workspace could not be found. Check the address or contact your administrator.
+            </p>
+            <p class="mt-2 text-xs text-slate-400">No default workspace is selected for this host.</p>
+          </div>
+        } @else {
         <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
           <div class="mb-6 text-center sm:mb-8">
             <h1 class="text-xl font-bold text-slate-900 sm:text-2xl">
@@ -80,6 +89,7 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
             >
           </p>
         </div>
+        }
       </main>
 
       <app-elva-footer variant="dark" />

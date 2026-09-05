@@ -10,11 +10,20 @@ const RESERVED = new Set([
   'www',
   'api',
   'mail',
+  'smtp',
+  'imap',
   'support',
   'app',
   'portal',
   'static',
-  'assets'
+  'assets',
+  'cdn',
+  'status',
+  'health',
+  'docs',
+  'staging',
+  'dev',
+  'test'
 ]);
 
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

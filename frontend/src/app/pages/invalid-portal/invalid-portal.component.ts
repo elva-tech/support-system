@@ -18,6 +18,11 @@ import { ElvaHeaderComponent } from '../../shared/components/elva-header/elva-he
             Hostname <strong>{{ portal.hostname }}</strong> could not be mapped to the Platform portal or a
             Tenant workspace.
           </p>
+          <p class="mt-2 text-sm text-slate-500">
+            Use <code class="rounded bg-slate-100 px-1">admin.elvasupport.in</code> for platform administration, or
+            <code class="rounded bg-slate-100 px-1">{{ '{' }}slug{{ '}' }}.elvasupport.in</code> for a provisioned
+            workspace.
+          </p>
           <p class="mt-2 text-xs text-slate-400">Reason: {{ portal.reason }}</p>
         </div>
       </main>

@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
-const env = require("../../config/env");
 const packageJson = require("../../../package.json");
+const env = require("../../config/env");
 
 const getStorageStatus = () => {
   if (env.googleDrive.useMock) {
@@ -14,6 +14,31 @@ const getStorageStatus = () => {
   return "unavailable";
 };
 
+/** Liveness — process is up; no dependency checks. */
+const getLiveness = () => ({
+  status: "ok"
+});
+
+/** Readiness — MongoDB must be connected. */
+const getReadiness = async () => {
+  const mongodbState = mongoose.connection.readyState;
+  const mongodbConnected = mongodbState === 1;
+
+  if (!mongodbConnected) {
+    return {
+      status: "not_ready",
+      reason: "database_unavailable"
+    };
+  }
+
+  return {
+    status: "ready"
+  };
+};
+
+/**
+ * Detailed health (ops / legacy). Prefer /health and /health/ready in production probes.
+ */
 const getHealth = async () => {
   const mongodbState = mongoose.connection.readyState;
   const mongodb =
@@ -30,4 +55,4 @@ const getHealth = async () => {
   };
 };
 
-module.exports = { getHealth };
+module.exports = { getHealth, getLiveness, getReadiness };

@@ -1,6 +1,7 @@
 const logger = require("../shared/utils/logger");
 const { isSmtpConfigured } = require("../modules/notifications/smtp.config");
 const { isResendConfigured } = require("../modules/notifications/resend.config");
+const { parseOriginList } = require("../shared/utils/cors-origin.util");
 
 const DEV_DEFAULTS = {
   MONGODB_URI: "mongodb://localhost:27017/elva-support",
@@ -12,7 +13,12 @@ const validateEnvironment = () => {
   const isProduction = process.env.NODE_ENV === "production";
   const errors = [];
 
-  const requiredInProduction = ["MONGODB_URI", "JWT_SECRET", "INTERNAL_API_KEY", "CORS_ORIGIN"];
+  const requiredInProduction = [
+    "MONGODB_URI",
+    "JWT_SECRET",
+    "INTERNAL_API_KEY",
+    "TENANT_BASE_DOMAIN"
+  ];
 
   if (isProduction) {
     for (const key of requiredInProduction) {
@@ -21,20 +27,80 @@ const validateEnvironment = () => {
       }
     }
 
+    const corsRaw = process.env.CORS_ALLOWED_ORIGINS || process.env.CORS_ORIGIN;
+    if (!corsRaw) {
+      errors.push(
+        "CORS_ALLOWED_ORIGINS (or CORS_ORIGIN) is required in production — do not use *"
+      );
+    } else if (corsRaw.includes("*")) {
+      errors.push("CORS origins must not use wildcard * for authenticated APIs");
+    }
+
+    const allowTenantSubdomains = process.env.CORS_ALLOW_TENANT_SUBDOMAINS !== "false";
+    const baseDomain = (process.env.TENANT_BASE_DOMAIN || "").toLowerCase().trim();
+    const exactOrigins = parseOriginList(corsRaw);
+    const platformOrigin = `https://admin.${baseDomain}`;
+
+    if (
+      allowTenantSubdomains &&
+      baseDomain &&
+      !exactOrigins.includes(platformOrigin) &&
+      !exactOrigins.some((o) => o.includes("admin."))
+    ) {
+      // Soft requirement: recommend platform origin in list OR rely on subdomain matcher (admin is allowed via matcher)
+      logger.info("CORS tenant subdomain matching enabled", {
+        baseDomain,
+        platformOriginHint: platformOrigin
+      });
+    }
+
+    for (const origin of exactOrigins) {
+      try {
+        // eslint-disable-next-line no-new
+        new URL(origin);
+      } catch {
+        errors.push("Invalid CORS origin entry in allowlist");
+      }
+    }
+
     if (process.env.JWT_SECRET === DEV_DEFAULTS.JWT_SECRET) {
       errors.push(
-        "JWT_SECRET must not use the development default in production — set a long random string in Render Environment (not the value from .env.example)"
+        "JWT_SECRET must not use the development default in production — set a long random string"
       );
     }
 
     if (process.env.INTERNAL_API_KEY === DEV_DEFAULTS.INTERNAL_API_KEY) {
       errors.push(
-        "INTERNAL_API_KEY must not use the development default in production — set a long random string in Render Environment (not the value from .env.example)"
+        "INTERNAL_API_KEY must not use the development default in production — set a long random string"
       );
     }
 
     if (process.env.EXPOSE_OTP_IN_RESPONSE === "true") {
       errors.push("EXPOSE_OTP_IN_RESPONSE must be false in production");
+    }
+
+    if (process.env.TENANT_HEADER_OVERRIDE_ENABLED === "true") {
+      errors.push(
+        "TENANT_HEADER_OVERRIDE_ENABLED must not be true in production — hostname resolution is authoritative"
+      );
+    }
+
+    if (process.env.TENANT_DEV_DEFAULT_SLUG) {
+      errors.push(
+        "TENANT_DEV_DEFAULT_SLUG must not be set in production — unknown hosts must not fall back to a default tenant"
+      );
+    }
+
+    if (process.env.ENSURE_ADMIN_ON_STARTUP === "true") {
+      logger.warn(
+        "ENSURE_ADMIN_ON_STARTUP=true in production — prefer intentional bootstrap scripts over auto-create on every start"
+      );
+    }
+
+    if (!process.env.TRUST_PROXY || process.env.TRUST_PROXY === "false") {
+      logger.warn(
+        "TRUST_PROXY is false/unset — set TRUST_PROXY=1 when behind Nginx, ALB, Cloudflare, or Render so req.hostname reflects the public Host"
+      );
     }
 
     if (process.env.LOG_VIEWER_ENABLED === "false" && process.env.LOG_VIEWER_REQUIRE_AUTH === "false") {
@@ -47,8 +113,8 @@ const validateEnvironment = () => {
       );
     }
 
-    if (!process.env.FRONTEND_URL && !process.env.CORS_ORIGIN) {
-      errors.push("FRONTEND_URL or CORS_ORIGIN is required in production (for email links)");
+    if (!process.env.FRONTEND_URL && !corsRaw) {
+      errors.push("FRONTEND_URL or CORS_ALLOWED_ORIGINS is required in production (for email links)");
     }
 
     if (process.env.EMAIL_INBOUND_ENABLED === "true") {
@@ -92,7 +158,7 @@ const validateEnvironment = () => {
       }
     } else if (!isSmtpConfigured()) {
       errors.push(
-        "SMTP email is not configured in production — set SMTP_HOST, SMTP_USER, and SMTP_PASS (or use NOTIFICATION_PROVIDER=RESEND with RESEND_API_KEY on Render free tier)"
+        "SMTP email is not configured in production — set SMTP_HOST, SMTP_USER, and SMTP_PASS (or use NOTIFICATION_PROVIDER=RESEND with RESEND_API_KEY)"
       );
     }
   } else {

@@ -13,7 +13,7 @@ const parseFileSize = (value, fallback) => {
 
 const parseCorsOrigins = (value) => {
   if (!value) {
-    return ["http://localhost:4200"];
+    return isProduction ? [] : ["http://localhost:4200"];
   }
 
   return value
@@ -21,6 +21,38 @@ const parseCorsOrigins = (value) => {
     .map((origin) => origin.trim())
     .filter(Boolean);
 };
+
+/**
+ * Express trust proxy setting (Phase 13).
+ * TRUST_PROXY=false|0 → false (default; safest without a known reverse proxy)
+ * TRUST_PROXY=true|1 → 1 hop
+ * TRUST_PROXY=<number> → that many hops
+ * TRUST_PROXY=loopback|linklocal|uniquelocal → Express named values
+ */
+const parseTrustProxy = (raw) => {
+  if (raw === undefined || raw === null || String(raw).trim() === "") {
+    return false;
+  }
+  const value = String(raw).trim().toLowerCase();
+  if (value === "false" || value === "0" || value === "no" || value === "off") {
+    return false;
+  }
+  if (value === "true" || value === "yes" || value === "on") {
+    return 1;
+  }
+  if (value === "loopback" || value === "linklocal" || value === "uniquelocal") {
+    return value;
+  }
+  const asNumber = parseInt(value, 10);
+  if (Number.isFinite(asNumber) && asNumber >= 0) {
+    return asNumber;
+  }
+  return false;
+};
+
+const corsOrigins = parseCorsOrigins(
+  process.env.CORS_ALLOWED_ORIGINS || process.env.CORS_ORIGIN
+);
 
 module.exports = {
   nodeEnv: process.env.NODE_ENV || "development",
@@ -33,12 +65,32 @@ module.exports = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "24h",
   otpMaxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS, 10) || 5,
   otpLockMinutes: parseInt(process.env.OTP_LOCK_MINUTES, 10) || 15,
-  corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN),
+  corsOrigins,
+  /** Prefer CORS_ALLOWED_ORIGINS; CORS_ORIGIN kept for backward compatibility */
+  corsAllowTenantSubdomains:
+    process.env.CORS_ALLOW_TENANT_SUBDOMAINS === "true" ||
+    (isProduction && process.env.CORS_ALLOW_TENANT_SUBDOMAINS !== "false"),
+  corsAllowLocalhost:
+    process.env.CORS_ALLOW_LOCALHOST === "true" ||
+    (!isProduction && process.env.CORS_ALLOW_LOCALHOST !== "false"),
   corsAllowVercelPreviews: process.env.CORS_ALLOW_VERCEL_PREVIEWS === "true",
+  corsRequireHttpsSubdomains: process.env.CORS_REQUIRE_HTTPS_SUBDOMAINS !== "false",
   frontendUrl:
     process.env.FRONTEND_URL ||
-    parseCorsOrigins(process.env.CORS_ORIGIN)[0] ||
+    corsOrigins[0] ||
     "http://localhost:4200",
+  /**
+   * Reverse-proxy trust (Phase 13).
+   * Default false — set TRUST_PROXY=1 (or true) when behind Nginx/ALB/Cloudflare/Render.
+   */
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+  /**
+   * Ensure ELVA tenant admin from env on API start.
+   * Default: on in development/test, OFF in production (use intentional bootstrap).
+   */
+  ensureAdminOnStartup:
+    process.env.ENSURE_ADMIN_ON_STARTUP === "true" ||
+    (!isProduction && process.env.ENSURE_ADMIN_ON_STARTUP !== "false"),
   logViewerEnabled: process.env.LOG_VIEWER_ENABLED !== "false",
   logViewerRequireAuth:
     process.env.LOG_VIEWER_REQUIRE_AUTH === "true" ||
@@ -148,13 +200,19 @@ module.exports = {
     }
   },
   /**
-   * Tenant resolution (Phase 4).
+   * Tenant resolution (Phase 4 / 13).
    * - TENANT_BASE_DOMAIN: apex used for subdomain parsing (e.g. elvasupport.in)
    * - Header X-Tenant-Slug: allowed only when headerOverrideEnabled (dev/test by default)
    * - TENANT_DEV_DEFAULT_SLUG: last-resort slug when host/header yield nothing (never in production)
    */
   tenant: {
     baseDomain: (process.env.TENANT_BASE_DOMAIN || "elvasupport.in").toLowerCase().trim(),
+    platformAdminHost: (
+      process.env.PLATFORM_ADMIN_HOST ||
+      `admin.${process.env.TENANT_BASE_DOMAIN || "elvasupport.in"}`
+    )
+      .toLowerCase()
+      .trim(),
     headerOverrideEnabled:
       process.env.TENANT_HEADER_OVERRIDE_ENABLED === "true" ||
       (!isProduction && process.env.TENANT_HEADER_OVERRIDE_ENABLED !== "false"),

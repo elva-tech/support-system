@@ -10,6 +10,7 @@ const {
 } = require("./tenant.errors");
 const {
   extractHostname,
+  extractHostnameFromOrigin,
   parseTenantSlugFromHostname
 } = require("../../shared/utils/tenant-host.util");
 const { normalizeTenantSlug } = require("./tenant.validation");
@@ -54,11 +55,13 @@ const loadTenantBySlug = async (rawSlug, { requireOperable = true } = {}) => {
 /**
  * Resolve tenant slug candidate from request (does not load DB).
  * Priority:
- * 1. X-Tenant-Slug when header override enabled (dev/test)
- * 2. Hostname subdomain under TENANT_BASE_DOMAIN
- * 3. TENANT_DEV_DEFAULT_SLUG (non-production only)
+ * 1. X-Tenant-Slug when header override enabled (dev/test only — never in production)
+ * 2. Hostname subdomain under TENANT_BASE_DOMAIN (Option A / portal Host)
+ * 3. Browser Origin hostname when Host is API/reserved/external (Option B)
+ * 4. TENANT_DEV_DEFAULT_SLUG (non-production only)
  *
- * Production: X-Tenant-Slug is rejected when present (visibility), never honored.
+ * Production: X-Tenant-Slug is rejected when present; never honored.
+ * Origin never overrides a concrete tenant Host.
  */
 const resolveTenantSlugCandidate = (req) => {
   const headerRaw = req.headers[TENANT_HEADER];
@@ -76,10 +79,26 @@ const resolveTenantSlugCandidate = (req) => {
     return { source: "header", slug: headerSlug };
   }
 
-  const hostname = extractHostname(req);
+  const trustProxy = Boolean(env.trustProxy);
+  const hostname = extractHostname(req, { trustProxy });
   const parsed = parseTenantSlugFromHostname(hostname, env.tenant.baseDomain);
 
-  if (parsed.kind === "reserved") {
+  if (parsed.kind === "tenant" && parsed.slug) {
+    return { source: "hostname", slug: parsed.slug };
+  }
+
+  // Option B: dedicated API host (api.* / external) — use browser Origin when it is a tenant portal
+  if (["reserved", "platform", "external", "apex"].includes(parsed.kind)) {
+    const originHost = extractHostnameFromOrigin(req.headers.origin);
+    if (originHost) {
+      const originParsed = parseTenantSlugFromHostname(originHost, env.tenant.baseDomain);
+      if (originParsed.kind === "tenant" && originParsed.slug) {
+        return { source: "origin", slug: originParsed.slug };
+      }
+    }
+  }
+
+  if (parsed.kind === "platform" || parsed.kind === "reserved") {
     throw tenantError(
       400,
       TENANT_ERROR_CODES.INVALID_TENANT_HOST,
@@ -93,10 +112,6 @@ const resolveTenantSlugCandidate = (req) => {
       TENANT_ERROR_CODES.INVALID_TENANT_HOST,
       "Invalid tenant host"
     );
-  }
-
-  if (parsed.kind === "tenant" && parsed.slug) {
-    return { source: "hostname", slug: parsed.slug };
   }
 
   if (!env.isProduction && env.tenant.devDefaultSlug) {

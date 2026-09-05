@@ -4,7 +4,8 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const env = require("./config/env");
 const errorHandler = require("./shared/middleware/error.middleware");
-const { getHealth } = require("./shared/health/health.service");
+const { getHealth, getLiveness, getReadiness } = require("./shared/health/health.service");
+const { isAllowedCorsOrigin } = require("./shared/utils/cors-origin.util");
 
 const authRoutes = require("./modules/auth/auth.routes");
 const applicationRoutes = require("./modules/applications/application.routes");
@@ -35,31 +36,32 @@ const {
 
 const app = express();
 
-if (env.isProduction) {
-  app.set("trust proxy", 1);
-}
+// Phase 13: explicit trust proxy (default false). Set TRUST_PROXY=1 behind reverse proxies.
+app.set("trust proxy", env.trustProxy);
 
-const isAllowedCorsOrigin = (origin) => {
-  if (!origin) {
-    return true;
-  }
-
-  if (env.corsOrigins.includes(origin)) {
-    return true;
-  }
-
-  if (env.corsAllowVercelPreviews && /^https:\/\/[\w-]+\.vercel\.app$/.test(origin)) {
-    return true;
-  }
-
-  return false;
+const corsOptions = {
+  exactOrigins: env.corsOrigins,
+  baseDomain: env.tenant.baseDomain,
+  allowTenantSubdomains: env.corsAllowTenantSubdomains,
+  allowLocalhost: env.corsAllowLocalhost,
+  allowVercelPreviews: env.corsAllowVercelPreviews,
+  requireHttpsForSubdomains: env.isProduction ? env.corsRequireHttpsSubdomains : false
 };
 
-app.use(helmet());
+const evaluateCorsOrigin = (origin) => isAllowedCorsOrigin(origin, corsOptions);
+
+app.use(
+  helmet({
+    // Angular SPA + API on separate hosts: do not force overly strict COOP/COEP defaults
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy: false,
+    referrerPolicy: { policy: "no-referrer" }
+  })
+);
 app.use(
   cors({
     origin: (origin, callback) => {
-      callback(null, isAllowedCorsOrigin(origin));
+      callback(null, evaluateCorsOrigin(origin));
     },
     credentials: true
   })
@@ -77,7 +79,20 @@ app.get("/", logsViewerMiddleware);
 app.post("/logs/login", logsViewerLogin);
 app.post("/logs/logout", logsViewerLogout);
 
-app.get("/health", async (_req, res) => {
+/** Liveness — process up (no DB). */
+app.get("/health", (_req, res) => {
+  res.status(200).json(getLiveness());
+});
+
+/** Readiness — MongoDB connectivity. */
+app.get("/health/ready", async (_req, res) => {
+  const ready = await getReadiness();
+  const statusCode = ready.status === "ready" ? 200 : 503;
+  res.status(statusCode).json(ready);
+});
+
+/** Legacy detailed health (ops). Prefer /health and /health/ready for probes. */
+app.get("/health/detail", async (_req, res) => {
   const health = await getHealth();
   const statusCode = health.status === "ok" ? 200 : 503;
   res.status(statusCode).json(health);
@@ -114,3 +129,4 @@ app.use((_req, res) => {
 app.use(errorHandler);
 
 module.exports = app;
+module.exports.evaluateCorsOrigin = evaluateCorsOrigin;

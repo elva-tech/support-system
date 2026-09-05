@@ -14,6 +14,7 @@
     "migrate:status": "migrate-mongo status",
     "migrate:up": "migrate-mongo up",
     "migrate:down": "migrate-mongo down",
+    "verify:production-config": "node scripts/verify-production-config.js",
     "test": "jest --runInBand --forceExit",
     "test:ci": "jest --runInBand --forceExit --coverage"
   },

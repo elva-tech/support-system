@@ -25,11 +25,20 @@ const RESERVED_TENANT_SLUGS = Object.freeze([
   "www",
   "api",
   "mail",
+  "smtp",
+  "imap",
   "support",
   "app",
   "portal",
   "static",
-  "assets"
+  "assets",
+  "cdn",
+  "status",
+  "health",
+  "docs",
+  "staging",
+  "dev",
+  "test"
 ]);
 
 /**

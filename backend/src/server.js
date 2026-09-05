@@ -23,7 +23,12 @@ const start = async () => {
   try {
     validateEnvironment();
     await connectDatabase();
-    await ensureAdminAccount();
+
+    if (env.ensureAdminOnStartup) {
+      await ensureAdminAccount();
+    } else {
+      logger.info("Skipping ensure-admin on startup (ENSURE_ADMIN_ON_STARTUP disabled)");
+    }
 
     notificationWorker.start();
     emailWorker.start();

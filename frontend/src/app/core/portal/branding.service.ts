@@ -43,6 +43,8 @@ export class BrandingService {
   private logoObjectUrl: string | null = null;
   private loadedForSlug: string | null = null;
   private loadInFlight = false;
+  /** True when hostname maps to a tenant slug that does not exist (no ELVA fallback). */
+  readonly workspaceUnavailable = signal(false);
 
   readonly branding = computed<WorkspaceBranding>(() => {
     const override = this.overrideSignal();
@@ -53,6 +55,7 @@ export class BrandingService {
   /** Call once when entering a tenant portal (shell / login). Non-blocking. */
   loadTenantBranding(): void {
     if (this.portal.isPlatformPortal) {
+      this.workspaceUnavailable.set(false);
       this.applyPlatformDefaults();
       return;
     }
@@ -68,10 +71,12 @@ export class BrandingService {
     }
     this.loadedForSlug = slug;
     this.loadInFlight = true;
+    this.workspaceUnavailable.set(false);
 
     this.workspaceApi.getPublicBranding().subscribe({
       next: (res) => {
         this.loadInFlight = false;
+        this.workspaceUnavailable.set(false);
         const data = res.data;
         const primary = normalizeHexColor(data.primaryColor);
         const secondary = normalizeHexColor(data.secondaryColor);
@@ -111,9 +116,20 @@ export class BrandingService {
           });
         }
       },
-      error: () => {
+      error: (err) => {
         this.loadInFlight = false;
         this.loadedForSlug = null;
+        const status = err?.status;
+        const code = err?.error?.errors?.code || err?.error?.code;
+        // Unknown tenant host: do not fall back to ELVA branding as if workspace exists
+        if (status === 404 || code === 'TENANT_NOT_FOUND') {
+          this.workspaceUnavailable.set(true);
+          this.overrideSignal.set(null);
+          this.applyCssVariables(null, null);
+          return;
+        }
+        // Transient API failure: keep neutral defaults so login remains possible
+        this.workspaceUnavailable.set(false);
         this.applyCssVariables(null, null);
       }
     });
