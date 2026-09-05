@@ -54,7 +54,7 @@ export class BrandingService {
 
   /** Call once when entering a tenant portal (shell / login). Non-blocking. */
   loadTenantBranding(): void {
-    if (this.portal.isPlatformPortal) {
+    if (this.portal.isPlatformPortal || this.portal.isApexPortal) {
       this.workspaceUnavailable.set(false);
       this.applyPlatformDefaults();
       return;
@@ -250,10 +250,9 @@ export class BrandingService {
       primaryColor: null,
       secondaryColor: null,
       logoUrl: ELVA_DEFAULT_BRANDING.logoPath,
-      supportDisplayName:
-        slug === 'elva' ? ELVA_DEFAULT_BRANDING.supportDisplayName : 'Support',
-      loginTitle: ELVA_DEFAULT_BRANDING.loginTitle,
-      loginSubtitle: ELVA_DEFAULT_BRANDING.loginSubtitle,
+      supportDisplayName: 'Support',
+      loginTitle: 'Customer Help Center',
+      loginSubtitle: 'Secure support portal for this workspace',
       customerLabel: DEFAULT_CUSTOMER_LABEL,
       logoAvailable: false
     };

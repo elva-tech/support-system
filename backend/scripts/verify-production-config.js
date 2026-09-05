@@ -85,6 +85,14 @@ assert(
   isAllowedCorsOrigin(`https://elva.${baseDomain}`, corsOpts) === true
 );
 assert(
+  "apex origin allowed",
+  isAllowedCorsOrigin(`https://${baseDomain}`, corsOpts) === true
+);
+assert(
+  "www apex origin allowed",
+  isAllowedCorsOrigin(`https://www.${baseDomain}`, corsOpts) === true
+);
+assert(
   "evil lookalike rejected",
   isAllowedCorsOrigin("https://evil-elvasupport.in", corsOpts) === false
 );

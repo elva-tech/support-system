@@ -1,9 +1,15 @@
 /**
- * Pure hostname → portal / tenant slug resolution (Phase 7).
+ * Pure hostname → portal / tenant slug resolution.
  * No Angular DI — unit-testable and shared with Node verification script.
+ *
+ * Host contexts:
+ * - APEX     → elvasupport.in / www.elvasupport.in (public SaaS landing)
+ * - PLATFORM → admin.elvasupport.in
+ * - TENANT   → {slug}.elvasupport.in
+ * - UNKNOWN  → reserved/invalid/unrecognized hosts
  */
 
-export type PortalType = 'PLATFORM' | 'TENANT' | 'UNKNOWN';
+export type PortalType = 'APEX' | 'PLATFORM' | 'TENANT' | 'UNKNOWN';
 
 export const RESERVED_TENANT_SLUGS = Object.freeze([
   'admin',
@@ -32,8 +38,8 @@ export interface PortalHostConfig {
   tenantBaseDomain: string;
   platformAdminHost: string;
   developmentTenantSlug: string;
-  /** auto | platform | tenant — local override without DNS */
-  portalMode: 'auto' | 'platform' | 'tenant';
+  /** auto | platform | tenant | landing — local override without DNS */
+  portalMode: 'auto' | 'platform' | 'tenant' | 'landing';
   production: boolean;
 }
 
@@ -42,6 +48,16 @@ export interface PortalHostResult {
   tenantSlug: string | null;
   hostname: string;
   isLocalhost: boolean;
+  reason: string;
+}
+
+/** Conceptual host context used across docs / callers */
+export type HostContextType = 'platform' | 'admin' | 'tenant' | 'unknown';
+
+export interface HostContext {
+  type: 'apex' | 'admin' | 'tenant' | 'unknown';
+  tenantSlug?: string;
+  hostname: string;
   reason: string;
 }
 
@@ -102,7 +118,28 @@ export const resolvePortalFromHost = (
     };
   }
 
+  // Public SaaS landing: apex + www
+  if (baseDomain && (hostname === baseDomain || hostname === `www.${baseDomain}`)) {
+    return {
+      portalType: 'APEX',
+      tenantSlug: null,
+      hostname,
+      isLocalhost,
+      reason: hostname.startsWith('www.') ? 'www-apex-landing' : 'apex-landing'
+    };
+  }
+
   if (isLocalhost) {
+    if (config.portalMode === 'landing') {
+      return {
+        portalType: 'APEX',
+        tenantSlug: null,
+        hostname,
+        isLocalhost: true,
+        reason: 'local-portal-mode-landing'
+      };
+    }
+
     if (config.portalMode === 'platform') {
       return {
         portalType: 'PLATFORM',
@@ -191,4 +228,43 @@ export const resolvePortalFromHost = (
     isLocalhost,
     reason: 'unrecognized-host'
   };
+};
+
+/** Friendly wrapper around resolvePortalFromHost for docs / callers */
+export const getHostContext = (rawHost: string, config: PortalHostConfig): HostContext => {
+  const resolved = resolvePortalFromHost(rawHost, config);
+  if (resolved.portalType === 'APEX') {
+    return { type: 'apex', hostname: resolved.hostname, reason: resolved.reason };
+  }
+  if (resolved.portalType === 'PLATFORM') {
+    return { type: 'admin', hostname: resolved.hostname, reason: resolved.reason };
+  }
+  if (resolved.portalType === 'TENANT') {
+    return {
+      type: 'tenant',
+      tenantSlug: resolved.tenantSlug || undefined,
+      hostname: resolved.hostname,
+      reason: resolved.reason
+    };
+  }
+  return { type: 'unknown', hostname: resolved.hostname, reason: resolved.reason };
+};
+
+/** Absolute URL helpers for cross-host CTAs (apex → admin, etc.) */
+export const buildPlatformOrigin = (config: Pick<PortalHostConfig, 'platformAdminHost'>): string => {
+  const host = config.platformAdminHost.toLowerCase().trim();
+  return `https://${host}`;
+};
+
+export const buildApexOrigin = (config: Pick<PortalHostConfig, 'tenantBaseDomain'>): string => {
+  const host = config.tenantBaseDomain.toLowerCase().trim();
+  return `https://${host}`;
+};
+
+export const buildTenantOrigin = (
+  slug: string,
+  config: Pick<PortalHostConfig, 'tenantBaseDomain'>
+): string => {
+  const base = config.tenantBaseDomain.toLowerCase().trim();
+  return `https://${String(slug).toLowerCase()}.${base}`;
 };

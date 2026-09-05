@@ -1,90 +1,183 @@
-import { Component } from '@angular/core';
+import { Component, OnInit, computed, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { BrandingService } from '../../core/portal/branding.service';
+import { PortalContextService } from '../../core/portal/portal-context.service';
+import { PortalDocumentTitleService } from '../../core/portal/portal-document-title.service';
+import { CustomerTerminologyService } from '../../core/portal/customer-terminology.service';
 import { ElvaFooterComponent } from '../../shared/components/elva-footer/elva-footer.component';
 import { ElvaHeaderComponent } from '../../shared/components/elva-header/elva-header.component';
 
+/**
+ * Tenant workspace public home ({slug}.elvasupport.in).
+ * Branding is loaded from the tenant — never hardcodes ELVA as the product.
+ */
 @Component({
   selector: 'app-landing',
   standalone: true,
   imports: [RouterLink, ElvaHeaderComponent, ElvaFooterComponent],
   template: `
-    <div class="flex min-h-screen flex-col bg-gradient-to-br from-elva-950 via-elva-900 to-elva-brand text-white">
-      <app-elva-header subtitle="Customer Help Center">
-        <a routerLink="/auth/login" class="text-sm text-white/80 transition hover:text-white">
-          Admin portal
-        </a>
-        <a
-          routerLink="/merchant/login"
-          class="rounded-lg bg-white px-4 py-2 text-sm font-medium text-elva-brand shadow-sm transition hover:bg-elva-50"
-        >
-          Sign in
-        </a>
-      </app-elva-header>
-
-      <main class="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
-        <section class="grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-12">
-          <div>
-            <p class="mb-3 inline-block rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/90">
-              Exclusively Built for ELVA Customers
+    @if (branding.workspaceUnavailable()) {
+      <div class="flex min-h-screen flex-col bg-slate-100">
+        <app-elva-header
+          subtitle="Workspace not found"
+          tagline=""
+          productName="ELVA Support"
+          logoUrl="/images/elva-logo.png"
+        />
+        <main class="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-4 py-12">
+          <div class="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+            <h1 class="text-xl font-bold text-slate-900">Workspace not found</h1>
+            <p class="mt-3 text-sm text-slate-600">
+              This support portal does not exist or is no longer available.
             </p>
-            <h2 class="text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
-              Get help with orders, payouts, and account issues — fast.
-            </h2>
-            <p class="mt-5 text-base text-white/80 sm:text-lg">
-              ELVA Support connects you to our dedicated team. Raise tickets, track progress,
-              reply in one thread, and attach files — all from a secure customer portal.
-            </p>
-            <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <a
-                routerLink="/merchant/login"
-                class="inline-flex items-center justify-center rounded-lg bg-white px-6 py-3 text-sm font-semibold text-elva-brand shadow-lg transition hover:bg-elva-50"
-              >
-                Sign in to your account
-              </a>
-              <a
-                routerLink="/auth/login"
-                class="inline-flex items-center justify-center rounded-lg border border-white/30 px-6 py-3 text-sm font-medium text-white transition hover:bg-white/10"
-              >
-                Agent or admin access
-              </a>
-            </div>
-          </div>
-
-          <div class="rounded-2xl border border-white/15 bg-white/5 p-5 shadow-xl backdrop-blur sm:p-6">
-            <h3 class="text-lg font-semibold">How it works</h3>
-            <ol class="mt-5 space-y-5">
-              @for (step of steps; track step.title) {
-                <li class="flex gap-4">
-                  <span
-                    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-sm font-bold text-elva-brand"
-                  >
-                    {{ step.number }}
-                  </span>
-                  <div>
-                    <p class="font-medium">{{ step.title }}</p>
-                    <p class="mt-1 text-sm text-white/70">{{ step.description }}</p>
-                  </div>
-                </li>
+            <p class="mt-2 text-sm text-slate-500">
+              Hostname <strong>{{ portal.hostname }}</strong>
+              @if (portal.tenantSlug) {
+                (workspace <code class="rounded bg-slate-100 px-1">{{ portal.tenantSlug }}</code>)
               }
-            </ol>
+              could not be resolved.
+            </p>
+            <a
+              [href]="portal.apexUrl"
+              class="btn-primary mt-6 inline-flex"
+            >
+              Go to {{ apexHost }}
+            </a>
           </div>
-        </section>
+        </main>
+        <app-elva-footer
+          variant="light"
+          companyName="ELVA Support"
+          websiteLabel="elvasupport.in"
+          websiteUrl="https://elvasupport.in"
+          supportEmail="support@elvatech.in"
+        />
+      </div>
+    } @else {
+      <div
+        class="flex min-h-screen flex-col text-white"
+        [style.background]="
+          'linear-gradient(155deg, color-mix(in srgb, var(--tenant-primary-color) 92%, #000) 0%, var(--tenant-primary-color) 55%, color-mix(in srgb, var(--tenant-secondary-color) 70%, var(--tenant-primary-color)) 100%)'
+        "
+      >
+        <app-elva-header
+          [subtitle]="headerSubtitle()"
+          [tagline]="branding.branding().loginSubtitle || ''"
+          [productName]="branding.branding().productName"
+          [logoUrl]="branding.branding().logoUrl || '/images/elva-logo.png'"
+        >
+          <a routerLink="/auth/login" class="text-sm text-white/80 transition hover:text-white">
+            Staff portal
+          </a>
+          <a
+            routerLink="/merchant/login"
+            class="rounded-lg bg-white px-4 py-2 text-sm font-medium shadow-sm transition hover:bg-slate-50"
+            [style.color]="'var(--tenant-primary-color)'"
+          >
+            Sign in
+          </a>
+        </app-elva-header>
 
-        <section class="mt-12 grid gap-4 sm:grid-cols-2 lg:mt-16 lg:grid-cols-3 lg:gap-6">
-          @for (feature of features; track feature.title) {
-            <div class="rounded-xl border border-white/10 bg-white/5 p-5">
-              <p class="text-sm font-semibold text-white/90">{{ feature.title }}</p>
-              <p class="mt-2 text-sm text-white/70">{{ feature.description }}</p>
+        <main class="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
+          <section class="grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-12">
+            <div>
+              <p class="mb-3 inline-block rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/90">
+                {{ branding.branding().supportDisplayName }} · {{ terms.singular() }} portal
+              </p>
+              <h2 class="text-3xl font-bold leading-tight sm:text-4xl lg:text-5xl">
+                {{ heroTitle() }}
+              </h2>
+              <p class="mt-5 text-base text-white/80 sm:text-lg">
+                {{ heroBody() }}
+              </p>
+              <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <a
+                  routerLink="/merchant/login"
+                  class="inline-flex items-center justify-center rounded-lg bg-white px-6 py-3 text-sm font-semibold shadow-lg transition hover:bg-slate-50"
+                  [style.color]="'var(--tenant-primary-color)'"
+                >
+                  Sign in to your account
+                </a>
+                <a
+                  routerLink="/auth/login"
+                  class="inline-flex items-center justify-center rounded-lg border border-white/30 px-6 py-3 text-sm font-medium text-white transition hover:bg-white/10"
+                >
+                  Agent or admin access
+                </a>
+              </div>
             </div>
-          }
-        </section>
-      </main>
 
-      <app-elva-footer variant="dark" />
-    </div>
+            <div class="rounded-2xl border border-white/15 bg-white/5 p-5 shadow-xl backdrop-blur sm:p-6">
+              <h3 class="text-lg font-semibold">How it works</h3>
+              <ol class="mt-5 space-y-5">
+                @for (step of steps; track step.title) {
+                  <li class="flex gap-4">
+                    <span
+                      class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-sm font-bold"
+                      [style.color]="'var(--tenant-primary-color)'"
+                    >
+                      {{ step.number }}
+                    </span>
+                    <div>
+                      <p class="font-medium">{{ step.title }}</p>
+                      <p class="mt-1 text-sm text-white/70">{{ step.description }}</p>
+                    </div>
+                  </li>
+                }
+              </ol>
+            </div>
+          </section>
+
+          <section class="mt-12 grid gap-4 sm:grid-cols-2 lg:mt-16 lg:grid-cols-3 lg:gap-6">
+            @for (feature of features; track feature.title) {
+              <div class="rounded-xl border border-white/10 bg-white/5 p-5">
+                <p class="text-sm font-semibold text-white/90">{{ feature.title }}</p>
+                <p class="mt-2 text-sm text-white/70">{{ feature.description }}</p>
+              </div>
+            }
+          </section>
+        </main>
+
+        <app-elva-footer
+          variant="dark"
+          [companyName]="branding.branding().organizationName || branding.branding().productName"
+          [supportEmail]="''"
+          [showTicketEmailHint]="false"
+          websiteLabel=""
+          websiteUrl=""
+        />
+      </div>
+    }
   `
 })
-export class LandingComponent {
+export class LandingComponent implements OnInit {
+  readonly branding = inject(BrandingService);
+  readonly portal = inject(PortalContextService);
+  readonly terms = inject(CustomerTerminologyService);
+  private readonly titles = inject(PortalDocumentTitleService);
+
+  readonly apexHost = this.portal.apexUrl.replace(/^https?:\/\//, '');
+
+  readonly headerSubtitle = computed(
+    () => this.branding.branding().loginTitle || 'Customer Help Center'
+  );
+
+  readonly heroTitle = computed(() => {
+    const title = this.branding.branding().loginTitle?.trim();
+    if (title && title.toLowerCase() !== 'staff sign in') {
+      return title;
+    }
+    return `Get help from ${this.branding.branding().supportDisplayName}`;
+  });
+
+  readonly heroBody = computed(() => {
+    const sub = this.branding.branding().loginSubtitle?.trim();
+    if (sub && !sub.toLowerCase().includes('admin, team lead, or agent')) {
+      return sub;
+    }
+    return `${this.branding.branding().supportDisplayName} connects you to a dedicated team. Raise tickets, track progress, reply in one thread, and attach files — all from a secure ${this.terms.singular().toLowerCase()} portal.`;
+  });
+
   readonly steps = [
     {
       number: 1,
@@ -99,7 +192,8 @@ export class LandingComponent {
     {
       number: 3,
       title: 'Track and reply',
-      description: 'Follow status updates, chat with our team on the ticket thread, and get notified when resolved.'
+      description:
+        'Follow status updates, chat with the support team on the ticket thread, and get notified when resolved.'
     }
   ];
 
@@ -110,11 +204,16 @@ export class LandingComponent {
     },
     {
       title: 'Dedicated support team',
-      description: 'Tickets route to the right ELVA support team based on your issue type.'
+      description: 'Tickets route to the right team based on your issue type.'
     },
     {
       title: 'Full conversation history',
       description: 'Every reply and attachment stays on the ticket timeline for easy reference.'
     }
   ];
+
+  ngOnInit(): void {
+    this.branding.loadTenantBranding();
+    this.titles.apply();
+  }
 }

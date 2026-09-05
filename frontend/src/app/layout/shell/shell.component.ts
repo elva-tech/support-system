@@ -63,7 +63,14 @@ interface NavItem {
           <main class="flex-1 p-4 sm:p-6 lg:p-8">
             <router-outlet />
           </main>
-          <app-elva-footer variant="light" />
+          <app-elva-footer
+            variant="light"
+            [companyName]="branding.branding().organizationName || branding.branding().productName"
+            websiteLabel=""
+            websiteUrl=""
+            supportEmail=""
+            [showTicketEmailHint]="false"
+          />
         </div>
       </div>
     </div>

@@ -9,6 +9,6 @@ export const environment = {
   tenantBaseDomain: 'elvasupport.in',
   platformAdminHost: 'admin.elvasupport.in',
   developmentTenantSlug: '',
-  portalMode: 'auto' as 'auto' | 'platform' | 'tenant',
+  portalMode: 'auto' as 'auto' | 'platform' | 'tenant' | 'landing',
   sendTenantSlugHeader: false
 };

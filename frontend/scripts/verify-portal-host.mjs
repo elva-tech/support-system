@@ -1,6 +1,5 @@
 /**
- * Phase 7 portal-host verification (no Angular test runner in this project).
- * Mirrors frontend/src/app/core/portal/portal-host.util.ts rules.
+ * Portal-host verification (mirrors frontend/src/app/core/portal/portal-host.util.ts).
  *
  * Run: node scripts/verify-portal-host.mjs
  */
@@ -45,7 +44,14 @@ const resolve = (rawHost, config) => {
     return { portalType: 'PLATFORM', tenantSlug: null };
   }
 
+  if (baseDomain && (hostname === baseDomain || hostname === `www.${baseDomain}`)) {
+    return { portalType: 'APEX', tenantSlug: null };
+  }
+
   if (isLocalhost) {
+    if (config.portalMode === 'landing') {
+      return { portalType: 'APEX', tenantSlug: null };
+    }
     if (config.portalMode === 'platform') {
       return { portalType: 'PLATFORM', tenantSlug: null };
     }
@@ -85,13 +91,15 @@ const base = {
 };
 
 const cases = [
+  ['elvasupport.in', base, 'APEX', null],
+  ['www.elvasupport.in', base, 'APEX', null],
   ['admin.elvasupport.in', base, 'PLATFORM', null],
   ['elva.elvasupport.in', base, 'TENANT', 'elva'],
   ['abc.elvasupport.in', base, 'TENANT', 'abc'],
-  ['www.elvasupport.in', base, 'UNKNOWN', null],
   ['api.elvasupport.in', base, 'UNKNOWN', null],
   ['localhost', base, 'TENANT', 'elva'],
   ['localhost', { ...base, portalMode: 'platform' }, 'PLATFORM', null],
+  ['localhost', { ...base, portalMode: 'landing' }, 'APEX', null],
   ['127.0.0.1', base, 'TENANT', 'elva'],
   ['evil.com', base, 'UNKNOWN', null]
 ];
@@ -108,7 +116,6 @@ for (const [host, cfg, expectType, expectSlug] of cases) {
   }
 }
 
-// Token path helpers
 const isPlatformApi = (url) => /\/api\/platform(\/|$|\?)/.test(url);
 const isMerchantApi = (url) => /\/api\/merchant(\/|$|\?)/.test(url);
 const apiCases = [
@@ -127,7 +134,7 @@ for (const [url, plat, merch] of apiCases) {
 }
 
 if (failed) {
-  console.error(`\n${failed} check(s) failed`);
+  console.error(`\n${failed} verification check(s) failed`);
   process.exit(1);
 }
 console.log('\nAll portal-host verification checks passed');

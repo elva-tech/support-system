@@ -92,7 +92,14 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
         }
       </main>
 
-      <app-elva-footer variant="dark" />
+      <app-elva-footer
+        variant="dark"
+        [companyName]="branding.branding().organizationName || branding.branding().productName"
+        websiteLabel=""
+        websiteUrl=""
+        supportEmail=""
+        [showTicketEmailHint]="false"
+      />
     </div>
   `
 })

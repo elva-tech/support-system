@@ -1,10 +1,11 @@
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MerchantAuthService } from '../services/merchant-auth.service';
 import { MerchantApiService } from '../services/merchant-api.service';
+import { BrandingService } from '../../core/portal/branding.service';
 import { ElvaFooterComponent } from '../../shared/components/elva-footer/elva-footer.component';
 import { ElvaHeaderComponent } from '../../shared/components/elva-header/elva-header.component';
 
@@ -20,7 +21,13 @@ type MerchantTab = {
   imports: [CommonModule, RouterOutlet, RouterLink, ElvaHeaderComponent, ElvaFooterComponent],
   template: `
     <div class="flex min-h-screen flex-col bg-slate-50">
-      <app-elva-header subtitle="Customer Portal" [showActionsOnMobile]="true">
+      <app-elva-header
+        subtitle="Customer Portal"
+        [productName]="branding.branding().productName"
+        [tagline]="branding.branding().supportDisplayName"
+        [logoUrl]="branding.branding().logoUrl || '/images/elva-logo.png'"
+        [showActionsOnMobile]="true"
+      >
         <button
           type="button"
           class="shrink-0 rounded-lg border border-white/20 px-3 py-1.5 text-xs text-white transition hover:bg-white/10 sm:text-sm"
@@ -50,7 +57,14 @@ type MerchantTab = {
         <router-outlet />
       </main>
 
-      <app-elva-footer variant="light" />
+      <app-elva-footer
+        variant="light"
+        [companyName]="branding.branding().organizationName || branding.branding().productName"
+        websiteLabel=""
+        websiteUrl=""
+        supportEmail=""
+        [showTicketEmailHint]="false"
+      />
     </div>
   `,
   styles: [
@@ -65,14 +79,19 @@ type MerchantTab = {
     `
   ]
 })
-export class MerchantShellComponent {
+export class MerchantShellComponent implements OnInit {
   private readonly auth = inject(MerchantAuthService);
   private readonly api = inject(MerchantApiService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  readonly branding = inject(BrandingService);
 
   loggingOut = false;
   readonly currentUrl = signal(this.router.url);
+
+  ngOnInit(): void {
+    this.branding.loadTenantBranding();
+  }
 
   readonly tabs: MerchantTab[] = [
     { label: 'Dashboard', path: '/merchant/dashboard', match: 'exact' },

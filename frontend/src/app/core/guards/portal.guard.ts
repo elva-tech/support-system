@@ -9,6 +9,11 @@ export const platformPortalCanMatch: CanMatchFn = () => {
   return portal.isPlatformPortal;
 };
 
+export const apexPortalCanMatch: CanMatchFn = () => {
+  const portal = inject(PortalContextService);
+  return portal.isApexPortal;
+};
+
 export const tenantPortalCanMatch: CanMatchFn = () => {
   const portal = inject(PortalContextService);
   return portal.isTenantPortal;

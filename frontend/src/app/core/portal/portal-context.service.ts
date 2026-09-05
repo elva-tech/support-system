@@ -44,6 +44,10 @@ export class PortalContextService {
     return this.resolved.reason;
   }
 
+  get isApexPortal(): boolean {
+    return this.resolved.portalType === 'APEX';
+  }
+
   get isPlatformPortal(): boolean {
     return this.resolved.portalType === 'PLATFORM';
   }
@@ -68,5 +72,19 @@ export class PortalContextService {
 
   get snapshot(): PortalHostResult {
     return { ...this.resolved };
+  }
+
+  get platformLoginUrl(): string {
+    if (this.isLocalhost && !environment.production) {
+      return '/login';
+    }
+    return `https://${environment.platformAdminHost}/login`;
+  }
+
+  get apexUrl(): string {
+    if (this.isLocalhost && !environment.production) {
+      return '/';
+    }
+    return `https://${environment.tenantBaseDomain}`;
   }
 }

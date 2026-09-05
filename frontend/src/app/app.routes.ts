@@ -4,6 +4,7 @@ import {
   platformAuthGuard,
   platformGuestGuard,
   platformPortalCanMatch,
+  apexPortalCanMatch,
   platformRoleGuard,
   tenantAuthGuard,
   tenantGuestGuard,
@@ -12,6 +13,17 @@ import {
 import { merchantAuthGuard, merchantGuestGuard } from './merchant-portal/guards/merchant-auth.guard';
 
 export const routes: Routes = [
+  // ---------- APEX / PUBLIC SaaS LANDING (elvasupport.in / www) ----------
+  {
+    path: '',
+    pathMatch: 'full',
+    canMatch: [apexPortalCanMatch],
+    loadComponent: () =>
+      import('./pages/platform-landing/platform-landing.component').then(
+        (m) => m.PlatformLandingComponent
+      )
+  },
+
   // ---------- PLATFORM PORTAL (admin.elvasupport.in or localhost portalMode=platform) ----------
   {
     path: 'login',

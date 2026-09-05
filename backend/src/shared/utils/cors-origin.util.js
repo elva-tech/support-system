@@ -163,6 +163,11 @@ const isAllowedCorsOrigin = (origin, options = {}) => {
       // Allow http only for exactOrigins / localhost — not for public tenant hosts
       return false;
     }
+    // Public SaaS landing origin (apex / www) — no tenant APIs required, but allow CORS safely
+    const apex = normalizeBaseDomain(baseDomain);
+    if (apex && (parsed.host === apex || parsed.host === `www.${apex}`)) {
+      return true;
+    }
     if (matchesTenantSubdomainOrigin(parsed, baseDomain)) {
       return true;
     }

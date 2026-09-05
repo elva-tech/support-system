@@ -10,6 +10,7 @@ import { ElvaFooterComponent } from '../../../shared/components/elva-footer/elva
 import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva-header.component';
 import { BrandingService } from '../../../core/portal/branding.service';
 import { CustomerTerminologyService } from '../../../core/portal/customer-terminology.service';
+import { environment } from '../../../../environments/environment';
 
 @Component({
   selector: 'app-merchant-login',
@@ -28,6 +29,20 @@ import { CustomerTerminologyService } from '../../../core/portal/customer-termin
 
       <main class="flex flex-1 items-center justify-center px-4 py-8">
         <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
+          @if (branding.workspaceUnavailable()) {
+            <div class="text-center">
+              <h1 class="text-xl font-bold text-slate-900">Workspace not found</h1>
+              <p class="mt-3 text-sm text-slate-600">
+                This support portal does not exist or is no longer available.
+              </p>
+              <a
+                [href]="apexUrl"
+                class="btn-primary mt-6 inline-flex"
+              >
+                Go to {{ baseDomain }}
+              </a>
+            </div>
+          } @else {
           <div class="mb-6 text-center sm:mb-8">
             <h1 class="text-xl font-bold text-slate-900 sm:text-2xl">Welcome back</h1>
             <p class="mt-2 text-sm text-slate-500">Enter your registered email to receive an OTP</p>
@@ -67,10 +82,18 @@ import { CustomerTerminologyService } from '../../../core/portal/customer-termin
             Staff member?
             <a routerLink="/auth/login" class="hover:underline" [style.color]="'var(--tenant-primary-color)'">Admin portal</a>
           </p>
+          }
         </div>
       </main>
 
-      <app-elva-footer variant="dark" />
+      <app-elva-footer
+        variant="dark"
+        [companyName]="branding.branding().organizationName || branding.branding().productName"
+        websiteLabel=""
+        websiteUrl=""
+        supportEmail=""
+        [showTicketEmailHint]="false"
+      />
     </div>
   `
 })
@@ -82,6 +105,8 @@ export class MerchantLoginComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   readonly branding = inject(BrandingService);
   readonly terms = inject(CustomerTerminologyService);
+  readonly baseDomain = environment.tenantBaseDomain;
+  readonly apexUrl = `https://${environment.tenantBaseDomain}`;
 
   readonly loading = signal(false);
   readonly error = signal('');
