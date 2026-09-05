@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { DEFAULT_CONFIDENCE_THRESHOLD } = require("../../shared/constants/classification");
+const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const moduleKeywordSchema = new mongoose.Schema(
   {
@@ -18,6 +19,7 @@ const moduleKeywordSchema = new mongoose.Schema(
 
 const applicationProfileSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     applicationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Application",

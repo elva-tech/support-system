@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { INBOUND_MAIL_QUEUE_STATUS } = require("../../shared/constants/inbound-mail-queue");
+const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const attachmentSchema = new mongoose.Schema(
   {
@@ -14,6 +15,7 @@ const attachmentSchema = new mongoose.Schema(
 
 const inboundMailQueueSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     senderEmail: {
       type: String,
       required: true,

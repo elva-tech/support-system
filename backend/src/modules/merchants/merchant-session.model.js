@@ -1,7 +1,9 @@
 const mongoose = require("mongoose");
+const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const merchantSessionSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     merchantId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "MerchantProfile",

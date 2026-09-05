@@ -1,7 +1,9 @@
 const mongoose = require("mongoose");
+const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const merchantProfileSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     applicationId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Application",
@@ -26,9 +28,9 @@ const merchantProfileSchema = new mongoose.Schema(
     email: {
       type: String,
       required: true,
-      unique: true,
       lowercase: true,
       trim: true
+      // Uniqueness is tenant-scoped: { tenantId: 1, email: 1 }
     },
     phone: {
       type: String,
@@ -43,6 +45,7 @@ const merchantProfileSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+merchantProfileSchema.index({ tenantId: 1, email: 1 }, { unique: true });
 merchantProfileSchema.index({ applicationId: 1, externalUserId: 1 }, { unique: true });
 merchantProfileSchema.index({ applicationCode: 1, externalUserId: 1 }, { unique: true });
 

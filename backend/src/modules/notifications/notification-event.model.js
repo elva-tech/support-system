@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const { AUDIT_ACTIONS } = require("../../shared/constants/audit-actions");
 const { WORKER_NOTIFICATION_TYPES } = require("../../shared/constants/notification-types");
+const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const NOTIFICATION_EVENT_TYPES = [
   AUDIT_ACTIONS.TICKET_CREATED,
@@ -16,6 +17,7 @@ const NOTIFICATION_EVENT_TYPES = [
 
 const notificationEventSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     eventType: {
       type: String,
       enum: NOTIFICATION_EVENT_TYPES,

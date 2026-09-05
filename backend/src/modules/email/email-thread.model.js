@@ -1,8 +1,10 @@
 const mongoose = require("mongoose");
 const { EMAIL_DIRECTION } = require("../../shared/constants/communication-channels");
+const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const emailThreadSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     ticketId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Ticket",

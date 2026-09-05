@@ -4,9 +4,11 @@ const {
   CONVERSATION_SOURCES,
   ACTIVE_CONVERSATION_SOURCES
 } = require("../../shared/constants/communication-channels");
+const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const ticketSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     ticketNumber: {
       type: String,
       required: true,

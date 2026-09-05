@@ -1,9 +1,11 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const { ROLES, ALL_ROLES } = require("../../shared/constants/roles");
+const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const userSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     email: {
       type: String,
       required: true,

@@ -1,8 +1,10 @@
 const mongoose = require("mongoose");
 const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/constants/audit-actions");
+const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const auditLogSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     entityType: {
       type: String,
       enum: Object.values(ENTITY_TYPES),

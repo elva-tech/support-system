@@ -10,6 +10,7 @@ const env = require("../../config/env");
 const { usesElvaNotifyNativeOtp } = require("../notifications/elva-notify.config");
 const onboardingEmail = require("../notifications/onboarding-email.service");
 const logger = require("../../shared/utils/logger");
+const { resolveTenantIdForApplication } = require("../tenants/resolve-tenant-id");
 
 const OTP_EXPIRY_MS = env.otpExpiresMinutes * 60 * 1000;
 const OTP_VERIFY_FAILURE_MESSAGE = "Invalid email or OTP code";
@@ -178,6 +179,7 @@ const verifyOtp = async (email, otpCode, sessionMeta = {}) => {
   const expiresAt = new Date(Date.now() + env.merchantSessionExpiresMs);
 
   await MerchantSession.create({
+    tenantId: merchant.tenantId || null,
     merchantId: merchant._id,
     sessionToken: hashValue(sessionToken),
     expiresAt,
@@ -271,12 +273,16 @@ const syncMerchant = async (data) => {
     throw new ApiError(409, "Email already registered to another merchant");
   }
 
+  // Phase 3: keep tenant-scoped email uniqueness coherent before request isolation exists.
+  const tenantId = await resolveTenantIdForApplication(application);
+
   const merchant = await MerchantProfile.findOneAndUpdate(
     {
       applicationId: application._id,
       externalUserId: data.externalUserId
     },
     {
+      tenantId,
       applicationId: application._id,
       applicationCode: application.code,
       externalUserId: data.externalUserId,

@@ -1,8 +1,10 @@
 const mongoose = require("mongoose");
 const { NOTIFICATION_PROVIDERS, DELIVERY_STATUS } = require("../../shared/constants/notification-types");
+const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const notificationDeliverySchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     eventId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "NotificationEvent",

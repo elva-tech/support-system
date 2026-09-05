@@ -1,7 +1,9 @@
 const mongoose = require("mongoose");
+const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const applicationSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     name: {
       type: String,
       required: true,

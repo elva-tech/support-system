@@ -1,8 +1,10 @@
 const mongoose = require("mongoose");
 const { CLASSIFICATION_QUEUE_STATUS } = require("../../shared/constants/classification");
+const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const classificationQueueSchema = new mongoose.Schema(
   {
+    tenantId: tenantIdField,
     senderEmail: {
       type: String,
       required: true,
