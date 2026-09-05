@@ -8,8 +8,12 @@ const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/const
 const signToken = (userId) =>
   jwt.sign({ sub: userId }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
 
-const login = async (email, password) => {
-  const user = await User.findOne({ email }).select("+password");
+const login = async (email, password, { tenantId } = {}) => {
+  if (!tenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
+
+  const user = await User.findOne({ email, tenantId }).select("+password");
 
   if (!user || !user.isActive) {
     throw new ApiError(401, "Invalid email or password");
@@ -33,6 +37,7 @@ const login = async (email, password) => {
     actorType: ACTOR_TYPES.AGENT,
     actorId: user._id,
     actorName: `${user.firstName} ${user.lastName}`,
+    tenantId: user.tenantId,
     metadata: { email: user.email, role: user.role }
   });
 

@@ -219,6 +219,32 @@ const renderTeamLeadAlertEmail = ({ firstName, ticketNumber, subject, reasonLine
     `
   });
 
+const renderTenantAdminInvitationEmail = ({
+  adminName,
+  tenantName,
+  workspaceUrl,
+  invitationUrl,
+  expiryHours,
+  supportEmail
+}) =>
+  renderEmailLayout({
+    heroTitle: "Activate your workspace",
+    heroSubtitle: "Welcome to ELVA Support",
+    preheader: `Your ${tenantName} support workspace is ready`,
+    bodyHtml: `
+      ${renderParagraph(`Hello ${escapeHtml(adminName)},`)}
+      ${renderParagraph("Welcome to ELVA Support. Your organization's support workspace has been created successfully.")}
+      ${renderInfoBox(`
+        <strong>Organization:</strong> ${escapeHtml(tenantName)}<br/>
+        <strong>Workspace:</strong> <a href="${escapeHtml(workspaceUrl)}" style="color:#4a6789;">${escapeHtml(workspaceUrl)}</a>
+      `)}
+      ${renderParagraph("To activate your administrator account and set your password, use the secure link below:")}
+      ${renderCtaButton("Set up your account", invitationUrl)}
+      ${renderParagraph(`<span style="font-size:14px;color:${MUTED};">This invitation expires in <strong>${escapeHtml(String(expiryHours))} hours</strong>.</span>`)}
+      ${renderParagraph(`<span style="font-size:14px;color:${MUTED};">If you did not expect this invitation, please contact <a href="mailto:${escapeHtml(supportEmail || "support@elvatech.in")}" style="color:#4a6789;">${escapeHtml(supportEmail || "support@elvatech.in")}</a>.</span>`)}
+    `
+  });
+
 module.exports = {
   renderOtpEmail,
   renderNotificationEmail,
@@ -232,5 +258,6 @@ module.exports = {
   renderMerchantWelcomeEmail,
   renderInboundAssignedEmail,
   renderInboundRejectedEmail,
-  renderTeamLeadAlertEmail
+  renderTeamLeadAlertEmail,
+  renderTenantAdminInvitationEmail
 };

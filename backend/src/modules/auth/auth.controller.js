@@ -3,7 +3,9 @@ const authService = require("./auth.service");
 
 const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-  const result = await authService.login(email, password);
+  const result = await authService.login(email, password, {
+    tenantId: req.tenant._id
+  });
 
   res.json({
     message: "Login successful",

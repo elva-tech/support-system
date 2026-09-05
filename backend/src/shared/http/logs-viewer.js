@@ -209,8 +209,20 @@ const logsViewerLogin = async (req, res) => {
   }
 
   try {
-    const user = await User.findOne({ email }).select("+password");
-    if (!user || !user.isActive || user.role !== ROLES.ADMIN) {
+    const candidates = await User.find({ email, role: ROLES.ADMIN, isActive: true }).select(
+      "+password"
+    );
+    let user = candidates[0] || null;
+    if (candidates.length > 1) {
+      const tenantService = require("../../modules/tenants/tenant.service");
+      const elva = await tenantService.findBySlug("elva");
+      user =
+        candidates.find(
+          (u) => elva && u.tenantId && u.tenantId.toString() === elva._id.toString()
+        ) || candidates[0];
+    }
+
+    if (!user) {
       return renderLoginPage(res, { error: "Invalid admin credentials." });
     }
 

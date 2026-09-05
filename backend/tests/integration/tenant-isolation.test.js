@@ -129,7 +129,9 @@ describe("Phase 4 tenant context & isolation", () => {
     });
 
     const tokenA = await loginAgent(app, "admin@test.com", "Admin@12345");
-    const tokenB = await loginAgent(app, "admin-b@other.com", "Admin@12345");
+    const tokenB = await loginAgent(app, "admin-b@other.com", "Admin@12345", {
+      tenantSlug: "other-co"
+    });
 
     // A cannot read B's ticket even with ObjectId
     const denied = await request(app)

@@ -23,6 +23,8 @@ const notificationCenterRoutes = require("./modules/notifications/notification-c
 const inboundMailQueueRoutes = require("./modules/inbound-mail-queue/inbound-mail-queue.routes");
 const inboundEmailWebhookRoutes = require("./modules/email/email-inbound-webhook.routes");
 const platformAdminRoutes = require("./modules/platform-admin/platform-admin.routes");
+const tenantProvisioningRoutes = require("./modules/tenant-provisioning/tenant-provisioning.routes");
+const onboardingRoutes = require("./modules/tenant-provisioning/onboarding.routes");
 
 const {
   logsViewerMiddleware,
@@ -82,7 +84,10 @@ app.get("/health", async (_req, res) => {
 
 app.use("/api/auth", authRoutes);
 /** Platform Administration APIs — no tenant context; separate JWT identity. */
+app.use("/api/platform", tenantProvisioningRoutes);
 app.use("/api/platform", platformAdminRoutes);
+/** Public tenant admin onboarding (invitation token based). */
+app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/applications", applicationRoutes);
 app.use("/api/modules", moduleRoutes);
 app.use("/api/teams", teamRoutes);

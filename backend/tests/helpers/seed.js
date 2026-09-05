@@ -184,8 +184,16 @@ const seedTestData = async () => {
 
 const request = require("supertest");
 
-const loginAgent = async (app, email, password) => {
-  const response = await request(app).post("/api/auth/login").send({ email, password });
+const loginAgent = async (app, email, password, { tenantSlug = "elva" } = {}) => {
+  const response = await request(app)
+    .post("/api/auth/login")
+    .set("X-Tenant-Slug", tenantSlug)
+    .send({ email, password });
+  if (!response.body?.data?.token) {
+    throw new Error(
+      `loginAgent failed for ${email} (tenant=${tenantSlug}): ${response.status} ${JSON.stringify(response.body)}`
+    );
+  }
   return response.body.data.token;
 };
 

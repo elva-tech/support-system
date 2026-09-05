@@ -34,7 +34,8 @@ const syncCriticalIndexes = async () => {
     require("../src/modules/applications/application.model").syncIndexes(),
     require("../src/modules/tickets/ticket-sequence.model").syncIndexes(),
     require("../src/modules/merchants/merchant-profile.model").syncIndexes(),
-    require("../src/modules/tenants/tenant.model").syncIndexes()
+    require("../src/modules/tenants/tenant.model").syncIndexes(),
+    require("../src/modules/users/user.model").syncIndexes()
   ]);
 };
 

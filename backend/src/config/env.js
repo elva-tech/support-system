@@ -163,5 +163,15 @@ module.exports = {
     devDefaultSlug: isProduction
       ? ""
       : (process.env.TENANT_DEV_DEFAULT_SLUG || "").toLowerCase().trim()
+  },
+  /**
+   * Tenant provisioning / onboarding (Phase 6).
+   * Reuses tenant.baseDomain for workspace URLs.
+   */
+  tenantProvisioning: {
+    invitationExpiryHours:
+      parseInt(process.env.TENANT_ADMIN_INVITATION_EXPIRY_HOURS, 10) || 72,
+    onboardingPath: process.env.TENANT_ONBOARDING_PATH || "/setup-account",
+    workspaceProtocol: (process.env.TENANT_WORKSPACE_PROTOCOL || "https").toLowerCase().trim()
   }
 };

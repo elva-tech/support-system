@@ -9,7 +9,6 @@ const userSchema = new mongoose.Schema(
     email: {
       type: String,
       required: true,
-      unique: true,
       lowercase: true,
       trim: true
     },
@@ -66,6 +65,9 @@ const userSchema = new mongoose.Schema(
     }
   }
 );
+
+/** Tenant-scoped email uniqueness (Phase 6) — replaces global email unique */
+userSchema.index({ tenantId: 1, email: 1 }, { unique: true });
 
 userSchema.virtual("fullName").get(function fullName() {
   return `${this.firstName} ${this.lastName}`;

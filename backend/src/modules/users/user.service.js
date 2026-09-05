@@ -154,7 +154,7 @@ const create = async (data, { tenantId } = {}) => {
   }
 
   const payload = stripClientTenantId(data);
-  const existing = await User.findOne({ email: payload.email });
+  const existing = await User.findOne({ email: payload.email, tenantId });
 
   if (existing) {
     throw new ApiError(409, "Email already exists");
@@ -188,7 +188,7 @@ const update = async (id, data, { tenantId } = {}) => {
   const payload = stripClientTenantId(data);
 
   if (payload.email && payload.email !== user.email) {
-    const existing = await User.findOne({ email: payload.email });
+    const existing = await User.findOne({ email: payload.email, tenantId });
     if (existing) {
       throw new ApiError(409, "Email already exists");
     }
