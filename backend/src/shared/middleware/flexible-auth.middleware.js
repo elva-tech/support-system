@@ -3,6 +3,7 @@ const ApiError = require("../utils/ApiError");
 const env = require("../../config/env");
 const User = require("../../modules/users/user.model");
 const merchantService = require("../../modules/merchants/merchant.service");
+const { PLATFORM_IDENTITY_TYPE } = require("../constants/platform");
 
 const flexibleAuth = async (req, res, next) => {
   const merchantToken = req.headers["x-merchant-session"];
@@ -26,6 +27,11 @@ const flexibleAuth = async (req, res, next) => {
 
     try {
       const decoded = jwt.verify(token, env.jwtSecret);
+
+      if (decoded.identityType === PLATFORM_IDENTITY_TYPE) {
+        return next(new ApiError(401, "Tenant staff authentication required"));
+      }
+
       const user = await User.findById(decoded.sub)
         .select("-password")
         .populate("teamId", "name")

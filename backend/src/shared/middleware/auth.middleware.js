@@ -2,7 +2,13 @@ const jwt = require("jsonwebtoken");
 const ApiError = require("../utils/ApiError");
 const env = require("../../config/env");
 const User = require("../../modules/users/user.model");
+const { PLATFORM_IDENTITY_TYPE } = require("../constants/platform");
 
+/**
+ * Tenant staff JWT authentication.
+ * Rejects Platform Admin tokens (identityType === PLATFORM_ADMIN).
+ * Legacy tenant JWTs ({ sub } only) remain valid.
+ */
 const authenticate = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
@@ -14,6 +20,11 @@ const authenticate = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, env.jwtSecret);
+
+    if (decoded.identityType === PLATFORM_IDENTITY_TYPE) {
+      return next(new ApiError(401, "Tenant staff authentication required"));
+    }
+
     const user = await User.findById(decoded.sub)
       .select("-password")
       .populate("teamId", "name")

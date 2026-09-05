@@ -121,7 +121,12 @@ const getQueueItem = async (id) => {
 
 const ensureMerchantForSender = async ({ senderEmail, senderName, application }) => {
   const email = senderEmail.toLowerCase();
-  let merchant = await MerchantProfile.findOne({ email });
+  const tenantId = application.tenantId;
+  if (!tenantId) {
+    throw new ApiError(400, "Application is missing tenant context");
+  }
+
+  let merchant = await MerchantProfile.findOne({ email, tenantId });
 
   if (merchant) {
     if (merchant.applicationId.toString() !== application._id.toString()) {
@@ -135,6 +140,7 @@ const ensureMerchantForSender = async ({ senderEmail, senderName, application })
 
   const localPart = email.split("@")[0] || "contact";
   merchant = await MerchantProfile.create({
+    tenantId,
     applicationId: application._id,
     applicationCode: application.code,
     email,

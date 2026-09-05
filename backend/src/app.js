@@ -22,6 +22,7 @@ const omnichannelRoutes = require("./modules/omnichannel/omnichannel.routes");
 const notificationCenterRoutes = require("./modules/notifications/notification-center.routes");
 const inboundMailQueueRoutes = require("./modules/inbound-mail-queue/inbound-mail-queue.routes");
 const inboundEmailWebhookRoutes = require("./modules/email/email-inbound-webhook.routes");
+const platformAdminRoutes = require("./modules/platform-admin/platform-admin.routes");
 
 const {
   logsViewerMiddleware,
@@ -80,6 +81,8 @@ app.get("/health", async (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+/** Platform Administration APIs — no tenant context; separate JWT identity. */
+app.use("/api/platform", platformAdminRoutes);
 app.use("/api/applications", applicationRoutes);
 app.use("/api/modules", moduleRoutes);
 app.use("/api/teams", teamRoutes);

@@ -80,6 +80,16 @@ module.exports = {
     firstName: process.env.ADMIN_FIRST_NAME || "System",
     lastName: process.env.ADMIN_LAST_NAME || "Administrator"
   },
+  /**
+   * Platform Super Admin bootstrap credentials (Phase 5).
+   * Used ONLY by `npm run ensure:platform-admin` — never auto-applied on API startup.
+   * Tenant ADMIN (env.admin) is unrelated and must never imply platform access.
+   */
+  platformAdmin: {
+    email: process.env.PLATFORM_ADMIN_EMAIL || "",
+    password: process.env.PLATFORM_ADMIN_PASSWORD || "",
+    name: process.env.PLATFORM_ADMIN_NAME || "Platform Super Admin"
+  },
   notifications: {
     provider: process.env.NOTIFICATION_PROVIDER || "SMTP",
     fallbackEnabled: process.env.NOTIFICATION_FALLBACK_ENABLED !== "false",

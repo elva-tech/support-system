@@ -10,6 +10,7 @@
     "start": "node src/server.js",
     "dev": "node scripts/ensure-port-free.js 3000 && nodemon src/server.js",
     "bootstrap:apnacart": "node src/scripts/bootstrap-apnacart.js",
+    "ensure:platform-admin": "node scripts/ensure-platform-admin.js",
     "migrate:status": "migrate-mongo status",
     "migrate:up": "migrate-mongo up",
     "migrate:down": "migrate-mongo down",
