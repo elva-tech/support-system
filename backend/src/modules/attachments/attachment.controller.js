@@ -6,7 +6,8 @@ const download = asyncHandler(async (req, res) => {
   const file = await attachmentService.getAttachmentForDownload({
     attachmentId: req.params.id,
     user: req.user,
-    merchant: req.merchant
+    merchant: req.merchant,
+    tenantId: req.tenant?._id || null
   });
 
   res.setHeader("Content-Type", file.mimeType);

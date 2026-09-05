@@ -2,9 +2,16 @@ const NotificationDelivery = require("./notification-delivery.model");
 const { DELIVERY_STATUS } = require("../../shared/constants/notification-types");
 const logger = require("../../shared/utils/logger");
 
-const recordDelivery = async ({ eventId = null, provider, status, errorMessage = null }) => {
+const recordDelivery = async ({
+  eventId = null,
+  provider,
+  status,
+  errorMessage = null,
+  tenantId = null
+}) => {
   try {
     return await NotificationDelivery.create({
+      ...(tenantId ? { tenantId } : {}),
       eventId,
       provider,
       status,
@@ -21,10 +28,10 @@ const recordDelivery = async ({ eventId = null, provider, status, errorMessage =
   }
 };
 
-const recordSuccess = (provider, eventId = null) =>
-  recordDelivery({ eventId, provider, status: DELIVERY_STATUS.SUCCESS });
+const recordSuccess = (provider, eventId = null, { tenantId } = {}) =>
+  recordDelivery({ eventId, provider, status: DELIVERY_STATUS.SUCCESS, tenantId });
 
-const recordFailure = (provider, errorMessage, eventId = null) =>
-  recordDelivery({ eventId, provider, status: DELIVERY_STATUS.FAILED, errorMessage });
+const recordFailure = (provider, errorMessage, eventId = null, { tenantId } = {}) =>
+  recordDelivery({ eventId, provider, status: DELIVERY_STATUS.FAILED, errorMessage, tenantId });
 
 module.exports = { recordDelivery, recordSuccess, recordFailure };

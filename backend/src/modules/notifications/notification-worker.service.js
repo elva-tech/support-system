@@ -14,6 +14,12 @@ const {
   renderTicketClosedEmail
 } = require("./email-templates");
 const logger = require("../../shared/utils/logger");
+const {
+  loadTenantById,
+  buildEmailBranding,
+  isTenantOperable
+} = require("../../shared/utils/tenant-ops.util");
+const { idsEqual } = require("../tenants/tenant-resolver.service");
 
 const WORKER_TYPE_LIST = Object.values(WORKER_NOTIFICATION_TYPES);
 
@@ -42,14 +48,27 @@ const buildDeliveryPayload = async (event) => {
     throw new Error(`Ticket or merchant not found for event ${event._id}`);
   }
 
+  const tenantId = event.tenantId || ticket.tenantId || null;
+  if (event.tenantId && ticket.tenantId && !idsEqual(event.tenantId, ticket.tenantId)) {
+    throw new Error(`Notification event tenant mismatch for event ${event._id}`);
+  }
+
+  const tenant = await loadTenantById(tenantId);
+  if (tenant && !isTenantOperable(tenant)) {
+    throw new Error(`Tenant ${tenant.slug} is not operable for notification delivery`);
+  }
+
+  const branding = buildEmailBranding(tenant);
   const merchant = ticket.merchantId;
   const ticketNumber = ticket.ticketNumber;
   const ticketTag = emailThreadService.formatTicketTag(ticketNumber);
   const messageId = emailThreadService.generateMessageId(ticketNumber);
   const threadContext = await emailThreadService.getThreadContext(ticket._id);
+  const fromDisplay = `${branding.supportDisplayName} <${env.email.supportAddress}>`;
 
   const withThread = (subject, body, { html } = {}) => ({
     eventType: event.eventType,
+    tenantId,
     recipientEmail: merchant.email,
     recipientPhone: merchant.phone || null,
     subject: subject.includes(ticketTag) ? subject : `${ticketTag} ${subject}`,
@@ -63,8 +82,9 @@ const buildDeliveryPayload = async (event) => {
         : {})
     },
     replyTo: env.email.supportAddress,
-    from: env.email.supportAddress,
+    from: fromDisplay,
     emailThread: {
+      tenantId,
       ticketId: ticket._id,
       conversationId: null,
       messageId,
@@ -76,6 +96,7 @@ const buildDeliveryPayload = async (event) => {
       ticketId: ticket._id.toString(),
       ticketNumber,
       merchantName: merchant.merchantName,
+      tenantSlug: branding.tenantSlug,
       ...event.metadata
     }
   });
@@ -91,7 +112,8 @@ const buildDeliveryPayload = async (event) => {
           merchantName: merchant.merchantName,
           message: ticket.description,
           senderName: merchant.merchantName,
-          ticket
+          ticket,
+          branding
         })
       }
     ),
@@ -105,7 +127,8 @@ const buildDeliveryPayload = async (event) => {
           ticketNumber,
           subject: ticket.subject,
           merchantName: merchant.merchantName,
-          agentName: event.metadata?.assignedToName || "our support team"
+          agentName: event.metadata?.assignedToName || "our support team",
+          branding
         })
       }
     ),
@@ -124,7 +147,8 @@ const buildDeliveryPayload = async (event) => {
               ticketNumber,
               subject: ticket.subject,
               merchantName: merchant.merchantName,
-              closureNotes: event.metadata?.closureNotes || ticket.closureNotes || null
+              closureNotes: event.metadata?.closureNotes || ticket.closureNotes || null,
+              branding
             })
           }
         );
@@ -165,7 +189,11 @@ const processBatch = async () => {
 
     try {
       const deliveryPayload = await buildDeliveryPayload(event);
-      await notificationManager.sendNotification({ ...event.toObject(), deliveryPayload });
+      if (!event.tenantId && deliveryPayload.tenantId) {
+        event.tenantId = deliveryPayload.tenantId;
+        await NotificationEvent.findByIdAndUpdate(event._id, { tenantId: deliveryPayload.tenantId });
+      }
+      await notificationManager.sendNotification({ ...event.toObject(), tenantId: event.tenantId || deliveryPayload.tenantId, deliveryPayload });
     } catch (error) {
       logger.error("Notification worker failed to process event", {
         eventId: event._id.toString(),

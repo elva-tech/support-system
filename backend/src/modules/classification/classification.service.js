@@ -56,6 +56,7 @@ const createProfile = async (payload) => {
   await validateProfileModules(application._id, payload.modules || []);
 
   return ApplicationProfile.create({
+    ...(application.tenantId ? { tenantId: application.tenantId } : {}),
     applicationId: application._id,
     keywords: payload.keywords || [],
     modules: payload.modules || [],
@@ -90,13 +91,17 @@ const classifyConversation = async (payload) => {
   const result = await classificationEngine.classify({
     senderEmail: payload.senderEmail,
     subject: payload.subject,
-    body: payload.body
+    body: payload.body,
+    channelMetadata: payload.channelMetadata || {},
+    tenantId: payload.tenantId || null
   });
 
   let queueItem = null;
+  const tenantId = result.tenantId || payload.tenantId || null;
 
   if (payload.enqueue !== false && result.requiresManualClassification) {
     queueItem = await ClassificationQueue.create({
+      ...(tenantId ? { tenantId } : {}),
       senderEmail: payload.senderEmail,
       subject: payload.subject,
       body: payload.body || "",

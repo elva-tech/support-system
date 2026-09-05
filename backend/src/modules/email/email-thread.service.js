@@ -1,4 +1,5 @@
 const EmailThread = require("./email-thread.model");
+const { resolveTenantIdFromTicket } = require("../../shared/utils/tenant-ops.util");
 
 const formatTicketTag = (ticketNumber) => `[${ticketNumber}]`;
 
@@ -25,9 +26,13 @@ const recordThreadMessage = async ({
   direction,
   subject,
   fromEmail,
-  toEmail
-}) =>
-  EmailThread.create({
+  toEmail,
+  tenantId = null
+}) => {
+  const resolvedTenantId = tenantId || (await resolveTenantIdFromTicket(ticketId));
+
+  return EmailThread.create({
+    ...(resolvedTenantId ? { tenantId: resolvedTenantId } : {}),
     ticketId,
     conversationId,
     messageId,
@@ -38,11 +43,12 @@ const recordThreadMessage = async ({
     fromEmail,
     toEmail
   });
+};
 
 const getLatestOutboundMessageId = async (ticketId) => {
   const latest = await EmailThread.findOne({ ticketId, direction: "OUTBOUND" })
     .sort({ createdAt: -1 })
-    .select("messageId references");
+    .select("messageId references tenantId");
 
   return latest;
 };
@@ -51,17 +57,18 @@ const getThreadContext = async (ticketId) => {
   const latest = await getLatestOutboundMessageId(ticketId);
   const inbound = await EmailThread.findOne({ ticketId, direction: "INBOUND" })
     .sort({ createdAt: -1 })
-    .select("messageId references");
+    .select("messageId references tenantId");
 
   const anchor = latest || inbound;
   if (!anchor) {
-    return { inReplyTo: null, references: [] };
+    return { inReplyTo: null, references: [], tenantId: null };
   }
 
   const references = [...new Set([...(anchor.references || []), anchor.messageId].filter(Boolean))];
   return {
     inReplyTo: anchor.messageId,
-    references
+    references,
+    tenantId: anchor.tenantId || null
   };
 };
 
@@ -89,19 +96,56 @@ const normalizeMessageIds = (inReplyTo, references = []) => {
   return [...new Set([...normalized, ...unwrapped])];
 };
 
-const findTicketIdByThreadHeaders = async (inReplyTo, references = []) => {
+/**
+ * Resolve ticket from In-Reply-To / References.
+ * Returns null when no match, or when headers ambiguously match multiple tenants.
+ */
+const findTicketContextByThreadHeaders = async (inReplyTo, references = []) => {
   const messageIds = normalizeMessageIds(inReplyTo, references);
   if (!messageIds.length) {
     return null;
   }
 
-  const thread = await EmailThread.findOne({
+  const threads = await EmailThread.find({
     $or: [{ messageId: { $in: messageIds } }, { inReplyTo: { $in: messageIds } }]
   })
     .sort({ createdAt: -1 })
-    .select("ticketId");
+    .select("ticketId tenantId")
+    .limit(20)
+    .lean();
 
-  return thread?.ticketId || null;
+  if (!threads.length) {
+    return null;
+  }
+
+  const tenantKeys = new Set(
+    threads.map((thread) => (thread.tenantId ? thread.tenantId.toString() : "null"))
+  );
+  const ticketKeys = new Set(threads.map((thread) => thread.ticketId.toString()));
+
+  if (tenantKeys.size > 1 || ticketKeys.size > 1) {
+    return { ambiguous: true, ticketId: null, tenantId: null };
+  }
+
+  const primary = threads[0];
+  let tenantId = primary.tenantId || null;
+  if (!tenantId) {
+    tenantId = await resolveTenantIdFromTicket(primary.ticketId);
+  }
+
+  return {
+    ambiguous: false,
+    ticketId: primary.ticketId,
+    tenantId
+  };
+};
+
+const findTicketIdByThreadHeaders = async (inReplyTo, references = []) => {
+  const context = await findTicketContextByThreadHeaders(inReplyTo, references);
+  if (!context || context.ambiguous) {
+    return null;
+  }
+  return context.ticketId || null;
 };
 
 module.exports = {
@@ -111,5 +155,6 @@ module.exports = {
   recordThreadMessage,
   getThreadContext,
   findByMessageId,
-  findTicketIdByThreadHeaders
+  findTicketIdByThreadHeaders,
+  findTicketContextByThreadHeaders
 };

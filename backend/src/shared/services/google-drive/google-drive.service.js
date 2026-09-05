@@ -27,7 +27,7 @@ class MockGoogleDriveService extends GoogleDriveService {
       fs.mkdirSync(folderPath, { recursive: true });
     }
     return {
-      folderId: `mock-folder-${ticketNumber}`,
+      folderId: `mock-folder-${ticketNumber.replace(/[\\/]/g, "__")}`,
       folderUrl: `${env.apiBaseUrl}/uploads/${ticketNumber}`
     };
   }
@@ -84,13 +84,16 @@ class GoogleDriveApiService extends GoogleDriveService {
   }
 
   async ensureTicketFolder(ticketNumber) {
-    if (this.folderCache.has(ticketNumber)) {
-      return this.folderCache.get(ticketNumber);
+    // Folder key may be tenant-aware: "{slug}/tickets/{ticketNumber}"
+    const folderName = String(ticketNumber).replace(/[\\/]/g, "__");
+
+    if (this.folderCache.has(folderName)) {
+      return this.folderCache.get(folderName);
     }
 
     const query = [
       `'${this.parentFolderId}' in parents`,
-      `name = '${ticketNumber}'`,
+      `name = '${folderName.replace(/'/g, "\\'")}'`,
       "mimeType = 'application/vnd.google-apps.folder'",
       "trashed = false"
     ].join(" and ");
@@ -106,13 +109,13 @@ class GoogleDriveApiService extends GoogleDriveService {
         folderId: existing.data.files[0].id,
         folderUrl: existing.data.files[0].webViewLink
       };
-      this.folderCache.set(ticketNumber, folder);
+      this.folderCache.set(folderName, folder);
       return folder;
     }
 
     const created = await this.drive.files.create({
       requestBody: {
-        name: ticketNumber,
+        name: folderName,
         mimeType: "application/vnd.google-apps.folder",
         parents: [this.parentFolderId]
       },
@@ -123,7 +126,7 @@ class GoogleDriveApiService extends GoogleDriveService {
       folderId: created.data.id,
       folderUrl: created.data.webViewLink
     };
-    this.folderCache.set(ticketNumber, folder);
+    this.folderCache.set(folderName, folder);
     return folder;
   }
 

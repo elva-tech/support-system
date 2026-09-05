@@ -47,6 +47,7 @@ const processParsedEmail = async (parsed, sourceRef, { requireSupportRecipient }
 
   if (result.action === "REPLY" || result.action === "CREATED") {
     await emailThreadService.recordThreadMessage({
+      tenantId: result.tenantId || null,
       ticketId: result.ticketId,
       conversationId: result.conversationId || null,
       messageId,

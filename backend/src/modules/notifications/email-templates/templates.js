@@ -47,11 +47,12 @@ const buildTicketAssignmentHtml = (ticket) => {
   return "Currently all our agents are busy. But don't worry — your ticket is in the team lead queue and will be assigned soon.";
 };
 
-const renderTicketAssignedEmail = ({ ticketNumber, subject, merchantName, agentName }) =>
+const renderTicketAssignedEmail = ({ ticketNumber, subject, merchantName, agentName, branding = null }) =>
   renderEmailLayout({
     heroTitle: "Ticket assigned",
     heroSubtitle: ticketNumber,
     preheader: `Ticket ${ticketNumber} assigned to ${agentName}`,
+    branding,
     bodyHtml: `
       ${renderParagraph(`Dear ${escapeHtml(merchantName || "Customer")},`)}
       ${renderParagraph(`Your support ticket <strong>${escapeHtml(ticketNumber)}</strong> — "<em>${escapeHtml(subject)}</em>" — has been assigned to <strong>${escapeHtml(agentName)}</strong>.`)}
@@ -66,12 +67,14 @@ const renderTicketCreatedEmail = ({
   merchantName,
   message,
   senderName,
-  ticket
+  ticket,
+  branding = null
 }) =>
   renderEmailLayout({
     heroTitle: "Ticket created",
     heroSubtitle: ticketNumber,
     preheader: `Your support ticket ${ticketNumber} has been created`,
+    branding,
     bodyHtml: `
       ${renderParagraph(`Dear ${escapeHtml(merchantName || "Customer")},`)}
       ${renderParagraph(`Your support ticket <strong>${escapeHtml(ticketNumber)}</strong> has been created for "<em>${escapeHtml(subject)}</em>".`)}
@@ -82,11 +85,18 @@ const renderTicketCreatedEmail = ({
     `
   });
 
-const renderTicketClosedEmail = ({ ticketNumber, subject, merchantName, closureNotes }) =>
+const renderTicketClosedEmail = ({
+  ticketNumber,
+  subject,
+  merchantName,
+  closureNotes,
+  branding = null
+}) =>
   renderEmailLayout({
     heroTitle: "Ticket closed",
     heroSubtitle: ticketNumber,
     preheader: `Ticket ${ticketNumber} has been closed`,
+    branding,
     bodyHtml: `
       ${renderParagraph(`Dear ${escapeHtml(merchantName || "Customer")},`)}
       ${renderParagraph(`Your support ticket <strong>${escapeHtml(ticketNumber)}</strong> — "<em>${escapeHtml(subject)}</em>" — is now <strong>closed</strong>.`)}
@@ -99,11 +109,12 @@ const renderTicketClosedEmail = ({ ticketNumber, subject, merchantName, closureN
     `
   });
 
-const renderTicketReplyEmail = ({ senderName, senderType, message, ticketNumber }) =>
+const renderTicketReplyEmail = ({ senderName, senderType, message, ticketNumber, branding = null }) =>
   renderEmailLayout({
     heroTitle: `Update on ticket ${ticketNumber}`,
     heroSubtitle: "Support conversation",
     preheader: message.slice(0, 120),
+    branding,
     bodyHtml: `
       ${renderParagraph(`<strong>${escapeHtml(senderName)}</strong> <span style="color:${MUTED};">(${escapeHtml(senderType)})</span> wrote:`)}
       ${renderInfoBox(nl2br(message))}

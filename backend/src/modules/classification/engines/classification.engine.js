@@ -17,7 +17,10 @@ const buildDetectionResponse = ({
   confidence = 0,
   matchedBy = CLASSIFICATION_MATCHED_BY.MANUAL,
   requiresManualClassification = true,
-  merchantId = null
+  merchantId = null,
+  tenantId = null,
+  routingStatus = null,
+  routingReason = null
 }) => ({
   isExistingTicket,
   existingTicket,
@@ -26,34 +29,44 @@ const buildDetectionResponse = ({
   confidence: Number(confidence.toFixed(4)),
   matchedBy,
   requiresManualClassification,
+  tenantId: tenantId || null,
+  routingStatus,
+  routingReason,
   ...(merchantId && { merchantId })
 });
 
 /**
  * Orchestrates classification before ticket processing.
  *
- * Detection order:
- * 1. Ticket reference
- * 2. Sender email
- * 3. Subject keywords (application + module)
- * 4. Body keywords (application + module)
- * 5. Manual classification required
+ * Detection order (tenant-safe):
+ * 1. Email thread headers → Ticket → tenantId
+ * 2. Ticket reference (reject cross-tenant ambiguity)
+ * 3. Sender email (reject same-email-across-tenants ambiguity)
+ * 4. Subject/body keywords (only when tenantId is already known)
+ * 5. Manual / unresolved queue
  */
 class ClassificationEngine {
   async classify(input = {}) {
     const conversation = conversationEngine.parse(input);
-    const profiles = await this._loadProfiles();
     const channelMetadata = input.channelMetadata || {};
+    let knownTenantId = input.tenantId || null;
 
     // 1. Email thread headers (In-Reply-To / References)
     const threadMatch = await applicationDetectionEngine.detectByEmailThread(
       channelMetadata.inReplyTo,
       channelMetadata.references
     );
-    if (threadMatch) {
+    if (threadMatch?.routingStatus === "AMBIGUOUS") {
       return buildDetectionResponse({
         ...threadMatch,
-        requiresManualClassification: false
+        requiresManualClassification: true
+      });
+    }
+    if (threadMatch?.isExistingTicket) {
+      return buildDetectionResponse({
+        ...threadMatch,
+        requiresManualClassification: false,
+        routingStatus: threadMatch.routingStatus || "RESOLVED"
       });
     }
 
@@ -61,16 +74,32 @@ class ClassificationEngine {
     const ticketMatch = await applicationDetectionEngine.detectByTicketReference(
       conversation.ticketReference
     );
-    if (ticketMatch) {
+    if (ticketMatch?.routingStatus === "AMBIGUOUS") {
       return buildDetectionResponse({
         ...ticketMatch,
-        requiresManualClassification: false
+        requiresManualClassification: true
+      });
+    }
+    if (ticketMatch?.isExistingTicket) {
+      return buildDetectionResponse({
+        ...ticketMatch,
+        requiresManualClassification: false,
+        routingStatus: ticketMatch.routingStatus || "RESOLVED"
       });
     }
 
-    // 3. Sender email — application from merchant
+    // 3. Sender email — application from merchant (unique tenant only)
     const senderMatch = await applicationDetectionEngine.detectBySenderEmail(conversation.senderEmail);
+    if (senderMatch?.routingStatus === "AMBIGUOUS") {
+      return buildDetectionResponse({
+        ...senderMatch,
+        requiresManualClassification: true
+      });
+    }
+
     if (senderMatch) {
+      knownTenantId = senderMatch.tenantId || knownTenantId;
+      const profiles = await this._loadProfiles(knownTenantId);
       const enriched = await this._enrichWithModuleKeywords(senderMatch, conversation, profiles, {
         preferSubject: true
       });
@@ -80,7 +109,19 @@ class ClassificationEngine {
       return this._finalize(withDefaultModule, profiles);
     }
 
-    // 4. Subject keywords
+    // 4–5. Keywords only when tenant is already known (never guess across tenants).
+    if (!knownTenantId) {
+      return buildDetectionResponse({
+        matchedBy: CLASSIFICATION_MATCHED_BY.MANUAL,
+        requiresManualClassification: true,
+        confidence: 0,
+        routingStatus: "UNRESOLVED",
+        routingReason: "TENANT_NOT_DETERMINED"
+      });
+    }
+
+    const profiles = await this._loadProfiles(knownTenantId);
+
     const subjectAppMatch = applicationDetectionEngine.detectByKeywords(
       conversation.subjectLower,
       profiles,
@@ -98,10 +139,9 @@ class ClassificationEngine {
         CLASSIFICATION_MATCHED_BY.SUBJECT_KEYWORDS,
         MATCH_CONFIDENCE.SUBJECT_KEYWORDS_MAX
       );
-      return this._finalize(withModule, profiles);
+      return this._finalize({ ...withModule, tenantId: knownTenantId }, profiles);
     }
 
-    // 5. Body keywords
     const bodyAppMatch = applicationDetectionEngine.detectByKeywords(
       conversation.bodyLower,
       profiles,
@@ -119,14 +159,16 @@ class ClassificationEngine {
         CLASSIFICATION_MATCHED_BY.BODY_KEYWORDS,
         MATCH_CONFIDENCE.BODY_KEYWORDS_MAX
       );
-      return this._finalize(withModule, profiles);
+      return this._finalize({ ...withModule, tenantId: knownTenantId }, profiles);
     }
 
-    // 6. Manual classification
     return buildDetectionResponse({
       matchedBy: CLASSIFICATION_MATCHED_BY.MANUAL,
       requiresManualClassification: true,
-      confidence: 0
+      confidence: 0,
+      tenantId: knownTenantId,
+      routingStatus: knownTenantId ? "RESOLVED" : "UNRESOLVED",
+      routingReason: knownTenantId ? null : "TENANT_NOT_DETERMINED"
     });
   }
 
@@ -135,10 +177,12 @@ class ClassificationEngine {
       return match;
     }
 
-    const moduleDoc = await Module.findOne({
+    const moduleQuery = {
       applicationId: match.application.id,
       isActive: true
-    })
+    };
+
+    const moduleDoc = await Module.findOne(moduleQuery)
       .sort({ name: 1 })
       .select("code name");
 
@@ -158,9 +202,10 @@ class ClassificationEngine {
     };
   }
 
-  async _loadProfiles() {
-    const profiles = await ApplicationProfile.find()
-      .populate("applicationId", "code name isActive")
+  async _loadProfiles(tenantId = null) {
+    const query = tenantId ? { tenantId } : {};
+    const profiles = await ApplicationProfile.find(query)
+      .populate("applicationId", "code name isActive tenantId")
       .populate("modules.moduleId", "code name isActive applicationId")
       .lean();
 
@@ -250,7 +295,12 @@ class ClassificationEngine {
       confidence: candidate.confidence || 0,
       matchedBy: candidate.matchedBy || CLASSIFICATION_MATCHED_BY.MANUAL,
       requiresManualClassification,
-      merchantId: candidate.merchantId || null
+      merchantId: candidate.merchantId || null,
+      tenantId: candidate.tenantId || null,
+      routingStatus:
+        candidate.routingStatus ||
+        (candidate.tenantId ? "RESOLVED" : requiresManualClassification ? "UNRESOLVED" : "RESOLVED"),
+      routingReason: candidate.routingReason || null
     });
   }
 

@@ -8,11 +8,18 @@ const Ticket = require("../tickets/ticket.model");
 const TicketConversation = require("../conversations/ticket-conversation.model");
 const { CONVERSATION_SOURCES } = require("../../shared/constants/communication-channels");
 const { SENDER_TYPES } = require("../../shared/constants/conversation-types");
+const { INBOUND_MAIL_ROUTING_STATUS } = require("../../shared/constants/inbound-mail-queue");
+const {
+  loadTenantById,
+  isTenantOperable,
+  toIdString
+} = require("../../shared/utils/tenant-ops.util");
 const logger = require("../../shared/utils/logger");
 
 /**
  * Unified omnichannel conversation engine.
  * All channels (PORTAL, EMAIL, API) pass through here before ticket/timeline changes.
+ * Tenant identity travels with classification / ticket ownership — never guessed from HTTP.
  */
 class OmnichannelConversationEngine {
   async processInbound(payload) {
@@ -32,12 +39,13 @@ class OmnichannelConversationEngine {
         externalMessageId: normalized.externalMessageId
       });
       if (existing) {
-        const ticket = await Ticket.findById(existing.ticketId);
+        const ticket = await Ticket.findById(existing.ticketId).select("ticketNumber tenantId");
         return {
           action: "DUPLICATE",
           ticketId: ticket?._id?.toString() || null,
           ticketNumber: ticket?.ticketNumber || null,
-          conversationId: existing._id.toString()
+          conversationId: existing._id.toString(),
+          tenantId: ticket?.tenantId ? ticket.tenantId.toString() : null
         };
       }
     }
@@ -46,8 +54,20 @@ class OmnichannelConversationEngine {
       senderEmail: normalized.senderEmail,
       subject: normalized.subject,
       body: normalized.body,
-      channelMetadata: normalized.channelMetadata
+      channelMetadata: normalized.channelMetadata,
+      tenantId: payload.tenantId || null
     });
+
+    if (
+      classification.routingStatus === INBOUND_MAIL_ROUTING_STATUS.AMBIGUOUS ||
+      classification.matchedBy === "AMBIGUOUS_SENDER" ||
+      classification.matchedBy === "AMBIGUOUS_TICKET_REFERENCE"
+    ) {
+      return this._queueUnknownEmail(normalized, classification, {
+        routingStatus: INBOUND_MAIL_ROUTING_STATUS.AMBIGUOUS,
+        routingReason: classification.routingReason || "AMBIGUOUS_TENANT_ROUTING"
+      });
+    }
 
     if (classification.isExistingTicket && classification.existingTicket?.id) {
       return this._appendToExistingTicket({
@@ -63,25 +83,44 @@ class OmnichannelConversationEngine {
     }
 
     if (source === CONVERSATION_SOURCES.EMAIL) {
-      return this._queueUnknownEmail(normalized, classification);
+      return this._queueUnknownEmail(normalized, classification, {
+        routingStatus: classification.routingStatus || INBOUND_MAIL_ROUTING_STATUS.UNRESOLVED,
+        routingReason: classification.routingReason || "REQUIRES_MANUAL_CLASSIFICATION"
+      });
     }
 
     const queued = await classificationService.classifyConversation({
       senderEmail: normalized.senderEmail,
       subject: normalized.subject,
       body: normalized.body,
+      channelMetadata: normalized.channelMetadata,
+      tenantId: classification.tenantId || null,
       enqueue: true
     });
 
     return {
       action: "QUEUED",
       queueItemId: queued.queueItemId,
-      classification: queued
+      classification: queued,
+      tenantId: classification.tenantId || null
     };
   }
 
   async _appendToExistingTicket({ ticketId, source, normalized, classification }) {
     const ticket = await ticketService.getById(ticketId);
+    const tenantId = ticket.tenantId || classification.tenantId || null;
+
+    if (tenantId) {
+      const tenant = await loadTenantById(tenantId);
+      if (tenant && !isTenantOperable(tenant)) {
+        return this._queueUnknownEmail(normalized, classification, {
+          tenantId,
+          routingStatus: INBOUND_MAIL_ROUTING_STATUS.FAILED,
+          routingReason: `TENANT_${tenant.status}_NOT_OPERABLE`
+        });
+      }
+    }
+
     const merchant = await MerchantProfile.findById(ticket.merchantId);
 
     const conversation = await conversationService.addReply(ticketId, {
@@ -101,6 +140,7 @@ class OmnichannelConversationEngine {
 
     logger.info("Inbound message appended to existing ticket", {
       ticketNumber: ticket.ticketNumber,
+      tenantId: toIdString(tenantId),
       source,
       matchedBy: classification.matchedBy
     });
@@ -110,11 +150,25 @@ class OmnichannelConversationEngine {
       ticketId: ticket._id.toString(),
       ticketNumber: ticket.ticketNumber,
       conversationId: conversation._id.toString(),
+      tenantId: toIdString(tenantId),
       classification
     };
   }
 
   async _createNewTicket({ source, normalized, classification }) {
+    const tenantId = classification.tenantId || null;
+
+    if (tenantId) {
+      const tenant = await loadTenantById(tenantId);
+      if (tenant && !isTenantOperable(tenant)) {
+        return this._queueUnknownEmail(normalized, classification, {
+          tenantId,
+          routingStatus: INBOUND_MAIL_ROUTING_STATUS.FAILED,
+          routingReason: `TENANT_${tenant.status}_NOT_OPERABLE`
+        });
+      }
+    }
+
     let merchant = null;
 
     if (classification.merchantId) {
@@ -122,25 +176,44 @@ class OmnichannelConversationEngine {
     }
 
     if (!merchant) {
-      merchant = await MerchantProfile.findOne({
+      const merchantQuery = {
         email: normalized.senderEmail.toLowerCase(),
         applicationId: classification.application.id,
         isActive: true
+      };
+      if (tenantId) {
+        merchantQuery.tenantId = tenantId;
+      }
+      merchant = await MerchantProfile.findOne(merchantQuery);
+    }
+
+    if (merchant && tenantId && merchant.tenantId && toIdString(merchant.tenantId) !== toIdString(tenantId)) {
+      return this._queueUnknownEmail(normalized, classification, {
+        routingStatus: INBOUND_MAIL_ROUTING_STATUS.AMBIGUOUS,
+        routingReason: "MERCHANT_TENANT_MISMATCH"
       });
     }
 
     if (!merchant) {
       if (source === CONVERSATION_SOURCES.EMAIL) {
-        return this._queueUnknownEmail(normalized, classification);
+        return this._queueUnknownEmail(normalized, classification, {
+          tenantId,
+          routingStatus: tenantId
+            ? INBOUND_MAIL_ROUTING_STATUS.RESOLVED
+            : INBOUND_MAIL_ROUTING_STATUS.UNRESOLVED,
+          routingReason: "MERCHANT_NOT_FOUND"
+        });
       }
 
       const queued = await classificationService.classifyConversation({
         senderEmail: normalized.senderEmail,
         subject: normalized.subject,
         body: normalized.body,
+        channelMetadata: normalized.channelMetadata,
+        tenantId,
         enqueue: true
       });
-      return { action: "QUEUED", queueItemId: queued.queueItemId, classification: queued };
+      return { action: "QUEUED", queueItemId: queued.queueItemId, classification: queued, tenantId };
     }
 
     const ticket = await ticketService.createFromChannel({
@@ -154,11 +227,11 @@ class OmnichannelConversationEngine {
       channelMetadata: normalized.channelMetadata
     });
 
-    // Initial merchant message lives on ticket.description (synthetic timeline item), not a conversation row.
     await this._attachFiles(ticket, null, normalized.attachments, merchant);
 
     logger.info("Inbound message created new ticket", {
       ticketNumber: ticket.ticketNumber,
+      tenantId: toIdString(ticket.tenantId),
       source,
       matchedBy: classification.matchedBy
     });
@@ -167,11 +240,12 @@ class OmnichannelConversationEngine {
       action: "CREATED",
       ticketId: ticket._id.toString(),
       ticketNumber: ticket.ticketNumber,
+      tenantId: toIdString(ticket.tenantId),
       classification
     };
   }
 
-  async _queueUnknownEmail(normalized, classification) {
+  async _queueUnknownEmail(normalized, classification, routing = {}) {
     const item = await inboundMailQueueService.enqueueFromEmail({
       senderEmail: normalized.senderEmail,
       senderName: normalized.senderName,
@@ -179,18 +253,29 @@ class OmnichannelConversationEngine {
       body: normalized.body,
       attachments: normalized.attachments,
       externalMessageId: normalized.externalMessageId,
-      channelMetadata: normalized.channelMetadata
+      channelMetadata: {
+        ...normalized.channelMetadata,
+        classificationMatchedBy: classification?.matchedBy || null,
+        classificationConfidence: classification?.confidence ?? null
+      },
+      tenantId: routing.tenantId || classification?.tenantId || null,
+      routingStatus: routing.routingStatus || INBOUND_MAIL_ROUTING_STATUS.UNRESOLVED,
+      routingReason: routing.routingReason || classification?.routingReason || null
     });
 
     logger.info("Inbound email queued for admin review", {
       queueItemId: item._id.toString(),
-      senderEmail: item.senderEmail
+      senderEmail: item.senderEmail,
+      tenantId: item.tenantId ? item.tenantId.toString() : null,
+      routingStatus: item.routingStatus
     });
 
     return {
       action: "QUEUED",
       queueType: "INBOUND_MAIL",
       queueItemId: item._id.toString(),
+      tenantId: item.tenantId ? item.tenantId.toString() : null,
+      routingStatus: item.routingStatus,
       classification
     };
   }

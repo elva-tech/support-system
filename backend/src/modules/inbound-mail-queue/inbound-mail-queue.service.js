@@ -10,7 +10,10 @@ const MerchantProfile = require("../merchants/merchant-profile.model");
 const Ticket = require("../tickets/ticket.model");
 const Attachment = require("../attachments/attachment.model");
 const TicketConversation = require("../conversations/ticket-conversation.model");
-const { INBOUND_MAIL_QUEUE_STATUS } = require("../../shared/constants/inbound-mail-queue");
+const {
+  INBOUND_MAIL_QUEUE_STATUS,
+  INBOUND_MAIL_ROUTING_STATUS
+} = require("../../shared/constants/inbound-mail-queue");
 const { CONVERSATION_SOURCES } = require("../../shared/constants/communication-channels");
 const { SENDER_TYPES, CONVERSATION_TYPES } = require("../../shared/constants/conversation-types");
 const { parsePagination, buildPaginationMeta } = require("../../shared/utils/pagination.util");
@@ -55,7 +58,10 @@ const enqueueFromEmail = async ({
   body,
   attachments = [],
   externalMessageId = null,
-  channelMetadata = {}
+  channelMetadata = {},
+  tenantId = null,
+  routingStatus = INBOUND_MAIL_ROUTING_STATUS.UNRESOLVED,
+  routingReason = null
 }) => {
   if (externalMessageId) {
     const existing = await InboundMailQueue.findOne({ externalMessageId });
@@ -65,6 +71,7 @@ const enqueueFromEmail = async ({
   }
 
   const item = await InboundMailQueue.create({
+    ...(tenantId ? { tenantId } : {}),
     senderEmail: senderEmail.toLowerCase(),
     senderName: senderName || "",
     subject,
@@ -72,7 +79,9 @@ const enqueueFromEmail = async ({
     attachments: [],
     externalMessageId,
     channelMetadata,
-    status: INBOUND_MAIL_QUEUE_STATUS.PENDING
+    status: INBOUND_MAIL_QUEUE_STATUS.PENDING,
+    routingStatus: routingStatus || INBOUND_MAIL_ROUTING_STATUS.UNRESOLVED,
+    routingReason: routingReason || ""
   });
 
   if (attachments.length) {
@@ -84,6 +93,8 @@ const enqueueFromEmail = async ({
     queueItemId: item._id.toString(),
     senderEmail: item.senderEmail,
     subject: item.subject,
+    tenantId: item.tenantId ? item.tenantId.toString() : null,
+    routingStatus: item.routingStatus,
     attachmentCount: item.attachments.length
   });
 
@@ -276,6 +287,11 @@ const assignToTeam = async (id, adminUser, payload) => {
   item.assignedApplicationId = application._id;
   item.assignedModuleId = moduleDoc._id;
   item.ticketId = ticket._id;
+  if (ticket.tenantId) {
+    item.tenantId = ticket.tenantId;
+    item.routingStatus = INBOUND_MAIL_ROUTING_STATUS.RESOLVED;
+    item.routingReason = "MANUAL_ASSIGNMENT";
+  }
   item.reviewedBy = adminUser._id;
   item.reviewedAt = new Date();
   item.adminNotes = payload.notes || "";
@@ -304,6 +320,7 @@ const assignToTeam = async (id, adminUser, payload) => {
     actorType: ACTOR_TYPES.AGENT,
     actorId: adminUser._id,
     actorName: `${adminUser.firstName} ${adminUser.lastName}`,
+    tenantId: ticket.tenantId || item.tenantId || null,
     metadata: {
       ticketNumber: ticket.ticketNumber,
       inboundMailQueueId: item._id.toString(),

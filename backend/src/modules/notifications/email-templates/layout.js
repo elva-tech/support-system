@@ -20,8 +20,17 @@ const renderEmailLayout = ({
   heroSubtitle = "ELVA Support",
   preheader = "",
   bodyHtml,
-  footerHtml
+  footerHtml,
+  branding = null
 }) => {
+  const supportDisplayName = branding?.supportDisplayName || "ELVA Support";
+  const effectiveHeroSubtitle =
+    heroSubtitle === "ELVA Support" || heroSubtitle === "Support conversation"
+      ? supportDisplayName === "ELVA Support"
+        ? heroSubtitle
+        : supportDisplayName
+      : heroSubtitle;
+
   const preheaderBlock = preheader
     ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${escapeHtml(preheader)}</div>`
     : "";
@@ -53,7 +62,7 @@ const renderEmailLayout = ({
                 <tr>
                   <td style="vertical-align:middle;">
                     <img src="${escapeHtml(getLogoUrl())}" alt="ELVA" width="48" height="48" style="display:inline-block;vertical-align:middle;border-radius:8px;" />
-                    <span style="display:inline-block;vertical-align:middle;margin-left:12px;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${ACCENT};">ELVA Support</span>
+                    <span style="display:inline-block;vertical-align:middle;margin-left:12px;font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${ACCENT};">${escapeHtml(supportDisplayName)}</span>
                   </td>
                 </tr>
               </table>
@@ -64,7 +73,7 @@ const renderEmailLayout = ({
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                 <tr>
                   <td style="padding:36px 28px 32px;">
-                    <p style="margin:0 0 8px;font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:rgba(255,255,255,0.75);">${escapeHtml(heroSubtitle)}</p>
+                    <p style="margin:0 0 8px;font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:rgba(255,255,255,0.75);">${escapeHtml(effectiveHeroSubtitle)}</p>
                     <h1 style="margin:0;font-size:26px;line-height:1.25;font-weight:700;color:#ffffff;">${escapeHtml(heroTitle)}</h1>
                   </td>
                 </tr>

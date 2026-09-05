@@ -147,16 +147,22 @@ const addReply = async (
     actorType: senderType === SENDER_TYPES.MERCHANT ? ACTOR_TYPES.MERCHANT : ACTOR_TYPES.AGENT,
     actorId: senderId,
     actorName: senderName,
+    tenantId: ticket.tenantId || null,
     metadata: { conversationId: conversation._id.toString(), source }
   });
 
   if (senderType === SENDER_TYPES.AGENT) {
-    await notificationService.createEvent(WORKER_NOTIFICATION_TYPES.AGENT_REPLY, ticketId, {
-      conversationId: conversation._id.toString(),
-      message,
-      senderName,
-      source
-    });
+    await notificationService.createEvent(
+      WORKER_NOTIFICATION_TYPES.AGENT_REPLY,
+      ticketId,
+      {
+        conversationId: conversation._id.toString(),
+        message,
+        senderName,
+        source
+      },
+      { tenantId: ticket.tenantId || null }
+    );
   }
 
   if (
@@ -183,7 +189,7 @@ const addReply = async (
 };
 
 const addInternalNote = async (ticketId, { senderId, senderName, message }) => {
-  await ticketService.getById(ticketId);
+  const ticket = await ticketService.getById(ticketId);
 
   const note = await TicketConversation.create({
     ticketId,
@@ -201,6 +207,7 @@ const addInternalNote = async (ticketId, { senderId, senderName, message }) => {
     actorType: ACTOR_TYPES.AGENT,
     actorId: senderId,
     actorName: senderName,
+    tenantId: ticket.tenantId || null,
     metadata: { conversationId: note._id.toString() }
   });
 
@@ -265,6 +272,7 @@ const updateStatus = async (ticketId, status, agent, { closureNotes } = {}) => {
     actorType: ACTOR_TYPES.AGENT,
     actorId: agent._id,
     actorName: agentName,
+    tenantId: ticket.tenantId || null,
     metadata: {
       ticketNumber: ticket.ticketNumber,
       previousStatus,
@@ -274,11 +282,16 @@ const updateStatus = async (ticketId, status, agent, { closureNotes } = {}) => {
   });
 
   if (status === TICKET_STATUSES.RESOLVED) {
-    await notificationService.createEvent(WORKER_NOTIFICATION_TYPES.TICKET_RESOLVED, ticket._id, {
-      ticketNumber: ticket.ticketNumber,
-      previousStatus,
-      newStatus: status
-    });
+    await notificationService.createEvent(
+      WORKER_NOTIFICATION_TYPES.TICKET_RESOLVED,
+      ticket._id,
+      {
+        ticketNumber: ticket.ticketNumber,
+        previousStatus,
+        newStatus: status
+      },
+      { tenantId: ticket.tenantId || null }
+    );
   }
 
   const becameInactive =
@@ -322,6 +335,7 @@ const transferTicket = async (ticketId, teamId, agent) => {
     actorType: ACTOR_TYPES.AGENT,
     actorId: agent._id,
     actorName: agentName,
+    tenantId: ticket.tenantId || null,
     metadata: {
       ticketNumber: ticket.ticketNumber,
       previousTeamId: previousTeam?._id?.toString() || null,
@@ -344,7 +358,17 @@ const uploadAttachment = async (ticketId, file, uploadedByLabel, conversationId 
     }
   }
 
-  const driveResult = await driveService.uploadFile(ticket.ticketNumber, file);
+  const {
+    loadTenantById,
+    buildTicketStorageFolder
+  } = require("../../shared/utils/tenant-ops.util");
+  const tenant = ticket.tenantId ? await loadTenantById(ticket.tenantId) : null;
+  const storageFolder = buildTicketStorageFolder({
+    tenantSlug: tenant?.slug,
+    ticketNumber: ticket.ticketNumber
+  });
+
+  const driveResult = await driveService.uploadFile(storageFolder, file);
 
   const attachment = await Attachment.create({
     ticketId,
@@ -366,11 +390,13 @@ const uploadAttachment = async (ticketId, file, uploadedByLabel, conversationId 
     actorType: isMerchant ? ACTOR_TYPES.MERCHANT : ACTOR_TYPES.AGENT,
     actorId: null,
     actorName: uploadedByLabel.replace(/^(merchant|agent):/, ""),
+    tenantId: ticket.tenantId || null,
     metadata: {
       ticketNumber: ticket.ticketNumber,
       fileName: attachment.fileName,
       fileSize: attachment.fileSize,
-      mimeType: attachment.mimeType
+      mimeType: attachment.mimeType,
+      storageFolder
     }
   });
 

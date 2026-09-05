@@ -1,5 +1,8 @@
 const mongoose = require("mongoose");
-const { INBOUND_MAIL_QUEUE_STATUS } = require("../../shared/constants/inbound-mail-queue");
+const {
+  INBOUND_MAIL_QUEUE_STATUS,
+  INBOUND_MAIL_ROUTING_STATUS
+} = require("../../shared/constants/inbound-mail-queue");
 const { tenantIdField } = require("../../shared/schema/tenant-id.field");
 
 const attachmentSchema = new mongoose.Schema(
@@ -90,6 +93,21 @@ const inboundMailQueueSchema = new mongoose.Schema(
     rejectReason: {
       type: String,
       default: ""
+    },
+    /**
+     * Tenant routing outcome for the central mailbox.
+     * tenantId may be null when routingStatus is UNRESOLVED or AMBIGUOUS.
+     */
+    routingStatus: {
+      type: String,
+      enum: Object.values(INBOUND_MAIL_ROUTING_STATUS),
+      default: INBOUND_MAIL_ROUTING_STATUS.UNRESOLVED,
+      index: true
+    },
+    routingReason: {
+      type: String,
+      default: "",
+      trim: true
     }
   },
   { timestamps: true, collection: "inbound_mail_queue" }
@@ -98,5 +116,7 @@ const inboundMailQueueSchema = new mongoose.Schema(
 inboundMailQueueSchema.index({ status: 1, createdAt: -1 });
 inboundMailQueueSchema.index({ senderEmail: 1, createdAt: -1 });
 inboundMailQueueSchema.index({ externalMessageId: 1 }, { sparse: true });
+inboundMailQueueSchema.index({ tenantId: 1, status: 1, createdAt: -1 });
+inboundMailQueueSchema.index({ routingStatus: 1, createdAt: -1 });
 
 module.exports = mongoose.model("InboundMailQueue", inboundMailQueueSchema);

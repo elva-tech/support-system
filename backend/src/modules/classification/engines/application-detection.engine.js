@@ -39,15 +39,31 @@ const toApplicationRef = (application) =>
 
 /**
  * Detects application context from ticket reference, sender email, and keywords.
+ * Tenant-safe: never auto-assign when the same email or ticket number spans tenants.
  */
 class ApplicationDetectionEngine {
   async detectByEmailThread(inReplyTo, references = []) {
-    const ticketId = await emailThreadService.findTicketIdByThreadHeaders(inReplyTo, references);
-    if (!ticketId) {
+    const context = await emailThreadService.findTicketContextByThreadHeaders(inReplyTo, references);
+    if (!context) {
       return null;
     }
 
-    const ticket = await Ticket.findById(ticketId)
+    if (context.ambiguous) {
+      return {
+        isExistingTicket: false,
+        existingTicket: null,
+        application: null,
+        module: null,
+        tenantId: null,
+        confidence: 0,
+        matchedBy: CLASSIFICATION_MATCHED_BY.AMBIGUOUS_TICKET_REFERENCE,
+        requiresManualClassification: true,
+        routingStatus: "AMBIGUOUS",
+        routingReason: "EMAIL_THREAD_MATCHES_MULTIPLE_TENANTS"
+      };
+    }
+
+    const ticket = await Ticket.findById(context.ticketId)
       .populate("applicationId", "code name")
       .populate("moduleId", "code name");
 
@@ -55,7 +71,7 @@ class ApplicationDetectionEngine {
       return null;
     }
 
-    return this._buildExistingTicketMatch(ticket);
+    return this._buildExistingTicketMatch(ticket, CLASSIFICATION_MATCHED_BY.EMAIL_THREAD);
   }
 
   async detectByTicketReference(ticketReference) {
@@ -63,18 +79,39 @@ class ApplicationDetectionEngine {
       return null;
     }
 
-    const ticket = await Ticket.findOne({ ticketNumber: ticketReference.toUpperCase() })
+    const tickets = await Ticket.find({ ticketNumber: ticketReference.toUpperCase() })
       .populate("applicationId", "code name")
-      .populate("moduleId", "code name");
+      .populate("moduleId", "code name")
+      .limit(5);
 
-    if (!ticket) {
+    if (!tickets.length) {
       return null;
     }
 
-    return this._buildExistingTicketMatch(ticket);
+    if (tickets.length > 1) {
+      const tenantKeys = new Set(
+        tickets.map((ticket) => (ticket.tenantId ? ticket.tenantId.toString() : "null"))
+      );
+      if (tenantKeys.size > 1) {
+        return {
+          isExistingTicket: false,
+          existingTicket: null,
+          application: null,
+          module: null,
+          tenantId: null,
+          confidence: 0,
+          matchedBy: CLASSIFICATION_MATCHED_BY.AMBIGUOUS_TICKET_REFERENCE,
+          requiresManualClassification: true,
+          routingStatus: "AMBIGUOUS",
+          routingReason: "TICKET_NUMBER_EXISTS_IN_MULTIPLE_TENANTS"
+        };
+      }
+    }
+
+    return this._buildExistingTicketMatch(tickets[0], CLASSIFICATION_MATCHED_BY.TICKET_REFERENCE);
   }
 
-  _buildExistingTicketMatch(ticket) {
+  _buildExistingTicketMatch(ticket, matchedBy = CLASSIFICATION_MATCHED_BY.TICKET_REFERENCE) {
     const application = ticket.applicationId;
     const module = ticket.moduleId;
 
@@ -93,8 +130,10 @@ class ApplicationDetectionEngine {
             name: module.name
           }
         : null,
+      tenantId: ticket.tenantId || null,
       confidence: MATCH_CONFIDENCE.TICKET_REFERENCE,
-      matchedBy: CLASSIFICATION_MATCHED_BY.TICKET_REFERENCE
+      matchedBy,
+      routingStatus: ticket.tenantId ? "RESOLVED" : "UNRESOLVED"
     };
   }
 
@@ -103,11 +142,38 @@ class ApplicationDetectionEngine {
       return null;
     }
 
-    const merchant = await MerchantProfile.findOne({
+    const merchants = await MerchantProfile.find({
       email: senderEmail.toLowerCase(),
       isActive: true
-    }).populate("applicationId", "code name");
+    })
+      .populate("applicationId", "code name")
+      .limit(10);
 
+    if (!merchants.length) {
+      return null;
+    }
+
+    if (merchants.length > 1) {
+      const tenantKeys = new Set(
+        merchants.map((merchant) => (merchant.tenantId ? merchant.tenantId.toString() : "null"))
+      );
+      if (tenantKeys.size > 1) {
+        return {
+          isExistingTicket: false,
+          existingTicket: null,
+          application: null,
+          module: null,
+          tenantId: null,
+          confidence: 0,
+          matchedBy: CLASSIFICATION_MATCHED_BY.AMBIGUOUS_SENDER,
+          requiresManualClassification: true,
+          routingStatus: "AMBIGUOUS",
+          routingReason: "SENDER_EMAIL_EXISTS_IN_MULTIPLE_TENANTS"
+        };
+      }
+    }
+
+    const merchant = merchants[0];
     if (!merchant?.applicationId) {
       return null;
     }
@@ -118,8 +184,10 @@ class ApplicationDetectionEngine {
       application: toApplicationRef(merchant.applicationId),
       module: null,
       merchantId: merchant._id.toString(),
+      tenantId: merchant.tenantId || null,
       confidence: MATCH_CONFIDENCE.SENDER_EMAIL,
-      matchedBy: CLASSIFICATION_MATCHED_BY.SENDER_EMAIL
+      matchedBy: CLASSIFICATION_MATCHED_BY.SENDER_EMAIL,
+      routingStatus: merchant.tenantId ? "RESOLVED" : "UNRESOLVED"
     };
   }
 
@@ -143,11 +211,13 @@ class ApplicationDetectionEngine {
         existingTicket: null,
         application: toApplicationRef(application),
         module: null,
+        tenantId: profile.tenantId || application.tenantId || null,
         confidence,
         matchedBy,
         matchedKeywords,
         profileId: profile._id.toString(),
-        confidenceThreshold: profile.confidenceThreshold
+        confidenceThreshold: profile.confidenceThreshold,
+        routingStatus: profile.tenantId ? "RESOLVED" : "UNRESOLVED"
       };
 
       if (!best || candidate.confidence > best.confidence) {
@@ -158,9 +228,10 @@ class ApplicationDetectionEngine {
     return best;
   }
 
-  async loadProfiles() {
-    return ApplicationProfile.find()
-      .populate("applicationId", "code name isActive")
+  async loadProfiles(tenantId = null) {
+    const query = tenantId ? { tenantId } : {};
+    return ApplicationProfile.find(query)
+      .populate("applicationId", "code name isActive tenantId")
       .lean()
       .then((profiles) => profiles.filter((profile) => profile.applicationId?.isActive !== false));
   }

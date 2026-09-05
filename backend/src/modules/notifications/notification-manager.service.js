@@ -107,11 +107,13 @@ class NotificationManager {
     const payload = event.deliveryPayload;
     const provider = this._emailProvider();
     const providerName = this._emailProviderName();
+    const tenantId = event.tenantId || payload?.tenantId || null;
+    const deliveryOpts = { tenantId };
 
     const primaryResult = await this._tryProvider(provider, "sendNotification", payload);
 
     if (primaryResult.success) {
-      await deliveryService.recordSuccess(providerName, event._id);
+      await deliveryService.recordSuccess(providerName, event._id, deliveryOpts);
       await this._recordOutboundEmailThread(payload);
       await this._markEventProcessed(event._id);
       return { success: true, provider: providerName };
@@ -120,7 +122,8 @@ class NotificationManager {
     await deliveryService.recordFailure(
       providerName,
       primaryResult.error || "Email delivery failed",
-      event._id
+      event._id,
+      deliveryOpts
     );
 
     if (!this.fallbackEnabled) {
@@ -135,12 +138,13 @@ class NotificationManager {
     );
 
     if (fallbackResult.success) {
-      await deliveryService.recordSuccess(NOTIFICATION_PROVIDERS.FALLBACK, event._id);
+      await deliveryService.recordSuccess(NOTIFICATION_PROVIDERS.FALLBACK, event._id, deliveryOpts);
     } else {
       await deliveryService.recordFailure(
         NOTIFICATION_PROVIDERS.FALLBACK,
         fallbackResult.error || "Fallback delivery failed",
-        event._id
+        event._id,
+        deliveryOpts
       );
     }
 
@@ -154,15 +158,21 @@ class NotificationManager {
   async sendEmail(payload) {
     const provider = this._emailProvider();
     const providerName = this._emailProviderName();
+    const deliveryOpts = { tenantId: payload?.tenantId || null };
     const result = await this._tryProvider(provider, "sendEmail", payload);
 
     if (result.success) {
-      await deliveryService.recordSuccess(providerName);
+      await deliveryService.recordSuccess(providerName, null, deliveryOpts);
       await this._recordOutboundEmailThread(payload);
       return { ...result, provider: providerName };
     }
 
-    await deliveryService.recordFailure(providerName, result.error || "Email delivery failed");
+    await deliveryService.recordFailure(
+      providerName,
+      result.error || "Email delivery failed",
+      null,
+      deliveryOpts
+    );
 
     if (!this.fallbackEnabled) {
       return { ...result, provider: providerName };
@@ -171,13 +181,15 @@ class NotificationManager {
     const fallbackResult = await this._tryProvider(this.fallbackProvider, "sendEmail", payload);
 
     if (fallbackResult.success) {
-      await deliveryService.recordSuccess(NOTIFICATION_PROVIDERS.FALLBACK);
+      await deliveryService.recordSuccess(NOTIFICATION_PROVIDERS.FALLBACK, null, deliveryOpts);
       return { ...fallbackResult, provider: NOTIFICATION_PROVIDERS.FALLBACK };
     }
 
     await deliveryService.recordFailure(
       NOTIFICATION_PROVIDERS.FALLBACK,
-      fallbackResult.error || "Fallback email delivery failed"
+      fallbackResult.error || "Fallback email delivery failed",
+      null,
+      deliveryOpts
     );
 
     return { ...fallbackResult, provider: NOTIFICATION_PROVIDERS.FALLBACK };
@@ -240,6 +252,7 @@ class NotificationManager {
     try {
       await emailThreadService.recordThreadMessage({
         ...payload.emailThread,
+        tenantId: payload.emailThread.tenantId || payload.tenantId || null,
         direction: EMAIL_DIRECTION.OUTBOUND,
         toEmail: payload.emailThread.toEmail || payload.to || payload.recipientEmail,
         fromEmail: payload.emailThread.fromEmail || env.email.supportAddress

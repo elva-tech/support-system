@@ -173,7 +173,8 @@ describe("ELVA Support Integration", () => {
 
       const response = await request(app)
         .get(`/api/attachments/${data.attachment._id}/download`)
-        .set("Authorization", `Bearer ${token}`);
+        .set("Authorization", `Bearer ${token}`)
+        .set("X-Tenant-Slug", "elva");
 
       expect(response.status).toBe(200);
       expect(response.text).toContain("test attachment content");
@@ -184,7 +185,8 @@ describe("ELVA Support Integration", () => {
 
       const response = await request(app)
         .get(`/api/attachments/${data.attachment._id}/download`)
-        .set("Authorization", `Bearer ${token}`);
+        .set("Authorization", `Bearer ${token}`)
+        .set("X-Tenant-Slug", "elva");
 
       expect(response.status).toBe(403);
     });
