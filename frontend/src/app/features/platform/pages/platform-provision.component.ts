@@ -2,12 +2,17 @@ import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { PlatformApiService, PlatformProvisioning } from '../../../core/services/platform-api.service';
+import {
+  PlatformApiService,
+  PlatformProvisioning,
+  WorkspaceAvailabilityResult
+} from '../../../core/services/platform-api.service';
 import {
   isReservedTenantSlug,
   isValidTenantSlugFormat,
   suggestTenantSlug
 } from '../../../core/portal/portal-host.util';
+import { environment } from '../../../../environments/environment';
 import { formatApiError } from '../../../shared/utils/api-error.util';
 
 @Component({
@@ -74,12 +79,35 @@ import { formatApiError } from '../../../shared/utils/api-error.util';
           </div>
           <div>
             <label class="form-label" for="slug">Tenant slug</label>
-            <input id="slug" class="form-input" formControlName="slug" />
+            <input id="slug" class="form-input" formControlName="slug" (input)="onSlugChange()" />
             <p class="mt-1 text-xs text-slate-500">
-              Workspace will be https://{{ form.controls.slug.value || 'slug' }}.elvasupport.in
+              Workspace URL:
+              <span class="font-medium text-slate-700">{{ previewWorkspaceUrl() }}</span>
             </p>
             @if (slugError()) {
               <p class="mt-1 text-xs text-red-600">{{ slugError() }}</p>
+            }
+            <div class="mt-3">
+              <button
+                type="button"
+                class="btn-secondary"
+                [disabled]="!!slugError() || !form.controls.slug.value || checkingAvailability()"
+                (click)="checkAvailability()"
+              >
+                {{ checkingAvailability() ? 'Checking…' : 'Check Availability & Prepare Workspace' }}
+              </button>
+            </div>
+            @if (availability(); as a) {
+              <ul class="mt-3 space-y-1 text-sm" [class.text-emerald-700]="a.available" [class.text-red-700]="!a.available">
+                @for (c of a.checks; track c.key) {
+                  <li>{{ c.ok ? '✓' : '❌' }} {{ c.message }}</li>
+                }
+              </ul>
+              @if (a.available && a.workspaceUrl) {
+                <p class="mt-2 text-sm font-medium text-emerald-800">
+                  Workspace ready: {{ a.workspaceUrl }}
+                </p>
+              }
             }
           </div>
           <div>
@@ -97,9 +125,16 @@ import { formatApiError } from '../../../shared/utils/api-error.util';
             <label class="form-label" for="adminEmail">Tenant admin email</label>
             <input id="adminEmail" type="email" class="form-input" formControlName="adminEmail" />
           </div>
-          <button type="submit" class="btn-primary" [disabled]="form.invalid || !!slugError() || loading()">
+          <button
+            type="submit"
+            class="btn-primary"
+            [disabled]="form.invalid || !!slugError() || !availabilityReady() || loading()"
+          >
             {{ loading() ? 'Provisioning…' : 'Provision business' }}
           </button>
+          @if (!availabilityReady() && form.controls.slug.value && !slugError()) {
+            <p class="text-xs text-amber-700">Run availability check before provisioning.</p>
+          }
         </form>
       }
     </div>
@@ -110,9 +145,12 @@ export class PlatformProvisionComponent {
   private readonly api = inject(PlatformApiService);
 
   readonly loading = signal(false);
+  readonly checkingAvailability = signal(false);
   readonly error = signal('');
   readonly result = signal<PlatformProvisioning | null>(null);
+  readonly availability = signal<WorkspaceAvailabilityResult | null>(null);
   private slugTouched = false;
+  private validatedSlug: string | null = null;
 
   readonly form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
@@ -128,6 +166,12 @@ export class PlatformProvisionComponent {
     });
   }
 
+  previewWorkspaceUrl(): string {
+    const slug = (this.form.controls.slug.value || 'slug').trim().toLowerCase() || 'slug';
+    const protocol = environment.production ? 'https' : 'https';
+    return `${protocol}://${slug}.${environment.tenantBaseDomain}`;
+  }
+
   slugError(): string {
     const slug = this.form.controls.slug.value.trim().toLowerCase();
     if (!slug) return '';
@@ -138,11 +182,48 @@ export class PlatformProvisionComponent {
     return '';
   }
 
+  onSlugChange(): void {
+    this.availability.set(null);
+    this.validatedSlug = null;
+  }
+
+  availabilityReady(): boolean {
+    const slug = this.form.controls.slug.value.trim().toLowerCase();
+    const a = this.availability();
+    return Boolean(a?.available && this.validatedSlug === slug);
+  }
+
+  checkAvailability(): void {
+    const slug = this.form.controls.slug.value.trim().toLowerCase();
+    this.form.controls.slug.setValue(slug);
+    if (!slug || this.slugError()) return;
+
+    this.checkingAvailability.set(true);
+    this.error.set('');
+    this.api.checkSlugAvailability(slug).subscribe({
+      next: (res) => {
+        this.availability.set(res.data);
+        this.validatedSlug = res.data.available ? res.data.slug : null;
+        this.checkingAvailability.set(false);
+      },
+      error: (err) => {
+        if (err?.error?.data) {
+          this.availability.set(err.error.data);
+          this.validatedSlug = null;
+        } else {
+          this.error.set(formatApiError(err, 'Availability check failed'));
+        }
+        this.checkingAvailability.set(false);
+      }
+    });
+  }
+
   onNameBlur(): void {
     if (this.slugTouched && this.form.controls.slug.value) return;
     const suggested = suggestTenantSlug(this.form.controls.name.value);
     if (suggested) {
       this.form.patchValue({ slug: suggested });
+      this.onSlugChange();
     }
   }
 
@@ -168,6 +249,8 @@ export class PlatformProvisionComponent {
   resetForm(): void {
     this.result.set(null);
     this.error.set('');
+    this.availability.set(null);
+    this.validatedSlug = null;
     this.form.reset({ status: 'ACTIVE', name: '', slug: '', adminName: '', adminEmail: '' });
     this.slugTouched = false;
   }
@@ -175,7 +258,7 @@ export class PlatformProvisionComponent {
   onSubmit(): void {
     this.form.controls.slug.setValue(this.form.controls.slug.value.trim().toLowerCase());
     this.slugTouched = true;
-    if (this.form.invalid || this.slugError()) return;
+    if (this.form.invalid || this.slugError() || !this.availabilityReady()) return;
 
     this.loading.set(true);
     this.error.set('');
@@ -192,7 +275,6 @@ export class PlatformProvisionComponent {
           this.loading.set(false);
         },
         error: (err) => {
-          // 422 may still return provisioning payload
           if (err?.error?.data?.id) {
             this.result.set(err.error.data);
           } else {

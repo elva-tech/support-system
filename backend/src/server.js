@@ -39,6 +39,8 @@ const start = async () => {
 
     notificationWorker.start();
     emailWorker.start();
+    const slaEscalationWorker = require("./modules/tickets/sla-escalation-worker.service");
+    slaEscalationWorker.start();
 
     if (!env.email.inboundEnabled) {
       logger.warn(
@@ -85,7 +87,7 @@ const start = async () => {
 
     registerGracefulShutdown(server, {
       timeoutMs: env.gracefulShutdownTimeoutMs,
-      workers: [notificationWorker, emailWorker]
+      workers: [notificationWorker, emailWorker, require("./modules/tickets/sla-escalation-worker.service")]
     });
 
     server.on("error", (error) => {

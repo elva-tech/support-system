@@ -3,7 +3,11 @@ const { body, param } = require("express-validator");
 const createTicketValidation = [
   body("moduleId").isMongoId().withMessage("Valid module id is required"),
   body("subject").trim().notEmpty().withMessage("Subject is required").isLength({ max: 200 }),
-  body("description").trim().notEmpty().withMessage("Description is required").isLength({ max: 5000 })
+  body("description").trim().notEmpty().withMessage("Description is required").isLength({ max: 5000 }),
+  body("priority")
+    .optional()
+    .isIn(["CRITICAL", "HIGH", "MEDIUM", "LOW"])
+    .withMessage("Invalid priority")
 ];
 
 const ticketIdParamValidation = [param("id").isMongoId().withMessage("Invalid ticket id")];

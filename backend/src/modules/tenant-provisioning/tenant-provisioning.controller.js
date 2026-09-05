@@ -20,6 +20,16 @@ const provisionTenant = asyncHandler(async (req, res) => {
   });
 });
 
+const checkSlugAvailability = asyncHandler(async (req, res) => {
+  const workspaceDomain = require("../tenants/workspace-domain.service");
+  const data = await workspaceDomain.checkWorkspaceAvailability(req.query.slug || req.body?.slug);
+  const status = data.available ? 200 : 409;
+  res.status(status).json({
+    message: data.message,
+    data
+  });
+});
+
 const listProvisionings = asyncHandler(async (req, res) => {
   const data = await provisioningService.listProvisionings(req.query);
   res.json({ data });
@@ -100,6 +110,7 @@ const completeSetup = asyncHandler(async (req, res) => {
 
 module.exports = {
   provisionTenant,
+  checkSlugAvailability,
   listProvisionings,
   getProvisioning,
   retryProvisioning,

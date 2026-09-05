@@ -62,6 +62,22 @@ const createForMerchant = async (merchant, data, { tenantId } = {}) => {
 
   const ticketNumber = await generateTicketNumber(merchant.applicationCode, resolvedTenantId);
 
+  const slaService = require("./sla.service");
+  const { startSlaOnTicket } = require("./ticket-lifecycle.service");
+  const sm = await slaService.getServiceManagement(resolvedTenantId);
+  const allowed = slaService.customerAllowedPriorities(sm);
+  let priority = data.priority || slaService.TICKET_PRIORITIES.MEDIUM;
+  if (data.priority) {
+    if (!allowed.includes(data.priority)) {
+      throw new ApiError(400, "Selected priority is not available for customers");
+    }
+    priority = data.priority;
+  } else {
+    priority = allowed.includes(slaService.TICKET_PRIORITIES.MEDIUM)
+      ? slaService.TICKET_PRIORITIES.MEDIUM
+      : allowed[0] || slaService.TICKET_PRIORITIES.MEDIUM;
+  }
+
   const ticket = await Ticket.create({
     tenantId: resolvedTenantId,
     ticketNumber,
@@ -73,9 +89,12 @@ const createForMerchant = async (merchant, data, { tenantId } = {}) => {
     subject: data.subject,
     description: data.description,
     status: TICKET_STATUSES.OPEN,
+    priority,
     ...(data.source ? { source: data.source } : {}),
     ...(data.channelMetadata ? { channelMetadata: data.channelMetadata } : {})
   });
+
+  await startSlaOnTicket(ticket, { priority });
 
   await logAudit({
     entityType: ENTITY_TYPES.TICKET,
@@ -88,7 +107,8 @@ const createForMerchant = async (merchant, data, { tenantId } = {}) => {
     metadata: {
       ticketNumber: ticket.ticketNumber,
       subject: ticket.subject,
-      moduleId: moduleDoc._id.toString()
+      moduleId: moduleDoc._id.toString(),
+      priority
     },
     skipNotificationEvent: data.skipTicketCreatedNotification === true
   });
@@ -153,7 +173,11 @@ const getForMerchant = async (merchantId, ticketId, { tenantId } = {}) => {
     throw new ApiError(404, "Ticket not found");
   }
 
-  return ticket;
+  const slaService = require("./sla.service");
+  const sm = await slaService.getServiceManagement(ticket.tenantId);
+  const plain = ticket.toObject ? ticket.toObject() : ticket;
+  plain.slaStatus = slaService.attachSlaPublicView(plain, sm);
+  return plain;
 };
 
 const getStatsForMerchant = async (merchantId, { tenantId } = {}) => {
@@ -245,7 +269,11 @@ const getById = async (ticketId, { tenantId } = {}) => {
     throw new ApiError(404, "Ticket not found");
   }
 
-  return ticket;
+  const slaService = require("./sla.service");
+  const sm = await slaService.getServiceManagement(ticket.tenantId);
+  const plain = ticket.toObject ? ticket.toObject() : ticket;
+  plain.slaStatus = slaService.attachSlaPublicView(plain, sm);
+  return plain;
 };
 
 module.exports = {

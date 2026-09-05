@@ -266,5 +266,8 @@ module.exports = {
       parseInt(process.env.TENANT_ADMIN_INVITATION_EXPIRY_HOURS, 10) || 72,
     onboardingPath: process.env.TENANT_ONBOARDING_PATH || "/setup-account",
     workspaceProtocol: (process.env.TENANT_WORKSPACE_PROTOCOL || "https").toLowerCase().trim()
+  },
+  sla: {
+    escalationIntervalMs: parseInt(process.env.SLA_ESCALATION_INTERVAL_MS, 10) || 60 * 1000
   }
 };

@@ -60,6 +60,26 @@ export interface PlatformProvisioning {
   updatedAt?: string;
 }
 
+export interface WorkspaceAvailabilityCheck {
+  key: string;
+  ok: boolean;
+  message: string;
+  code?: string;
+}
+
+export interface WorkspaceAvailabilityResult {
+  available: boolean;
+  slug: string | null;
+  workspaceHost: string | null;
+  workspaceUrl: string | null;
+  dnsMode: string;
+  baseDomain?: string;
+  platformAdminHost?: string;
+  checks: WorkspaceAvailabilityCheck[];
+  message: string;
+  code?: string | null;
+}
+
 export interface PaginatedList<T> {
   items: T[];
   total: number;
@@ -164,6 +184,16 @@ export class PlatformApiService {
     return this.http.post<{ message: string; data: PlatformProvisioning }>(
       `${this.baseUrl}/tenants/provision`,
       body
+    );
+  }
+
+  checkSlugAvailability(
+    slug: string
+  ): Observable<{ message: string; data: WorkspaceAvailabilityResult }> {
+    const params = new HttpParams().set('slug', slug);
+    return this.http.get<{ message: string; data: WorkspaceAvailabilityResult }>(
+      `${this.baseUrl}/tenants/slug-availability`,
+      { params }
     );
   }
 

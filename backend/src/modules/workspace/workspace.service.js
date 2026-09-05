@@ -80,7 +80,8 @@ const toPlainSettings = (tenant) => {
     organization: { ...(settings.organization || {}) },
     branding: { ...(settings.branding || {}) },
     support: { ...(settings.support || {}) },
-    notifications: { ...(settings.notifications || {}) }
+    notifications: { ...(settings.notifications || {}) },
+    serviceManagement: settings.serviceManagement || null
   };
 };
 
@@ -312,6 +313,7 @@ const getSettings = async (tenantId) => {
     branding: brandingResponse(settings.branding),
     support: supportResponse(settings.support),
     notifications: settings.notifications,
+    serviceManagement: settings.serviceManagement || require("../../shared/constants/service-management").defaultServiceManagement(),
     setup,
     emailBranding: buildEmailBranding(tenant)
   };
@@ -634,6 +636,61 @@ const setupSummaryForPlatform = (tenant) => {
   };
 };
 
+const getServiceManagementSettings = async (tenantId) => {
+  const { ensureServiceManagementDefaults, getServiceManagement } = require("../tickets/sla.service");
+  const tenant = await getTenantOrThrow(tenantId);
+  await ensureServiceManagementDefaults(tenant);
+  return getServiceManagement(tenantId);
+};
+
+const updateServiceManagementSettings = async (tenantId, payload = {}, { actor } = {}) => {
+  const { defaultServiceManagement } = require("../../shared/constants/service-management");
+  const tenant = await getTenantOrThrow(tenantId);
+  const settings = toPlainSettings(tenant);
+  const current = settings.serviceManagement || defaultServiceManagement();
+  const next = { ...current };
+
+  if (payload.priorities !== undefined) {
+    if (!Array.isArray(payload.priorities)) {
+      throw new ApiError(400, "priorities must be an array");
+    }
+    next.priorities = payload.priorities;
+  }
+  if (payload.businessHours !== undefined) {
+    next.businessHours = { ...current.businessHours, ...payload.businessHours };
+  }
+  if (payload.slaPolicies !== undefined) {
+    if (!Array.isArray(payload.slaPolicies)) {
+      throw new ApiError(400, "slaPolicies must be an array");
+    }
+    next.slaPolicies = payload.slaPolicies;
+  }
+  if (payload.escalationRules !== undefined) {
+    if (!Array.isArray(payload.escalationRules)) {
+      throw new ApiError(400, "escalationRules must be an array");
+    }
+    next.escalationRules = payload.escalationRules;
+  }
+  if (payload.agentMaxActiveTickets !== undefined) {
+    const n = Number(payload.agentMaxActiveTickets);
+    if (!Number.isFinite(n) || n < 1 || n > 100) {
+      throw new ApiError(400, "agentMaxActiveTickets must be between 1 and 100");
+    }
+    next.agentMaxActiveTickets = Math.floor(n);
+  }
+
+  settings.serviceManagement = next;
+  tenant.settings = settings;
+  tenant.markModified("settings");
+  await tenant.save();
+
+  await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_SERVICE_MANAGEMENT_UPDATED, tenantId, actor, {
+    updatedKeys: Object.keys(payload)
+  });
+
+  return next;
+};
+
 module.exports = {
   getSettings,
   getSetupStatus,
@@ -642,6 +699,8 @@ module.exports = {
   updateOrganization,
   updateBranding,
   updateSupportSettings,
+  getServiceManagementSettings,
+  updateServiceManagementSettings,
   skipSetupStep,
   uploadLogo,
   deleteLogo,

@@ -48,6 +48,9 @@ router.get(
 router.post("/:id/reply", requireTicketAccess, replyValidation, validate, commController.reply);
 router.post("/:id/internal-note", requireTicketAccess, internalNoteValidation, validate, commController.internalNote);
 router.patch("/:id/status", requireTicketAccess, statusValidation, validate, commController.updateStatus);
+router.post("/:id/resolve", requireTicketAccess, ticketIdParamValidation, validate, commController.resolveTicket);
+router.patch("/:id/priority", requireTicketAccess, ticketIdParamValidation, validate, commController.updatePriority);
+router.get("/:id/sla", requireTicketAccess, ticketIdParamValidation, validate, commController.getSlaStatus);
 router.patch("/:id/transfer", requireTicketAccess, transferValidation, validate, commController.transfer);
 router.get("/:id/timeline", requireTicketAccess, ticketIdParamValidation, validate, commController.timeline);
 router.post(

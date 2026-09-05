@@ -5,6 +5,43 @@ const {
   ACTIVE_CONVERSATION_SOURCES
 } = require("../../shared/constants/communication-channels");
 const { tenantIdField } = require("../../shared/schema/tenant-id.field");
+const {
+  ALL_TICKET_PRIORITIES,
+  TICKET_PRIORITIES,
+  SLA_CLOCK_STATES
+} = require("../../shared/constants/service-management");
+
+const slaCycleSchema = new mongoose.Schema(
+  {
+    cycleNumber: { type: Number, default: 1 },
+    priority: { type: String, enum: ALL_TICKET_PRIORITIES },
+    startedAt: { type: Date },
+    responseTargetMinutes: { type: Number },
+    resolutionTargetMinutes: { type: Number },
+    useBusinessHours: { type: Boolean, default: false },
+    responseDueAt: { type: Date, default: null },
+    resolutionDueAt: { type: Date, default: null },
+    firstResponseAt: { type: Date, default: null },
+    resolvedAt: { type: Date, default: null },
+    closedAt: { type: Date, default: null },
+    responseState: {
+      type: String,
+      enum: Object.values(SLA_CLOCK_STATES),
+      default: SLA_CLOCK_STATES.ON_TRACK
+    },
+    resolutionState: {
+      type: String,
+      enum: Object.values(SLA_CLOCK_STATES),
+      default: SLA_CLOCK_STATES.ON_TRACK
+    },
+    responseBreachedAt: { type: Date, default: null },
+    resolutionBreachedAt: { type: Date, default: null },
+    /** Idempotent escalation keys: `${metric}:${thresholdPercent}` */
+    triggeredThresholds: { type: [String], default: [] },
+    outcome: { type: String, default: null }
+  },
+  { _id: false }
+);
 
 const ticketSchema = new mongoose.Schema(
   {
@@ -56,6 +93,11 @@ const ticketSchema = new mongoose.Schema(
       enum: ALL_TICKET_STATUSES,
       default: TICKET_STATUSES.OPEN
     },
+    priority: {
+      type: String,
+      enum: ALL_TICKET_PRIORITIES,
+      default: TICKET_PRIORITIES.MEDIUM
+    },
     source: {
       type: String,
       enum: [...ACTIVE_CONVERSATION_SOURCES, ...Object.values(CONVERSATION_SOURCES)],
@@ -79,6 +121,28 @@ const ticketSchema = new mongoose.Schema(
     assignedAt: {
       type: Date,
       default: null
+    },
+    previousAssignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    resolvedAt: { type: Date, default: null },
+    resolvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
+    },
+    closedAt: { type: Date, default: null },
+    closedByMerchantId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MerchantProfile",
+      default: null
+    },
+    reopenedAt: { type: Date, default: null },
+    sla: {
+      currentCycle: { type: slaCycleSchema, default: null },
+      history: { type: [slaCycleSchema], default: [] }
     }
   },
   { timestamps: true }
@@ -88,6 +152,7 @@ ticketSchema.index({ merchantId: 1, createdAt: -1 });
 ticketSchema.index({ teamId: 1, status: 1 });
 ticketSchema.index({ applicationCode: 1, createdAt: -1 });
 ticketSchema.index({ teamId: 1, assignedTo: 1, status: 1, createdAt: 1 });
+ticketSchema.index({ tenantId: 1, "sla.currentCycle.resolutionDueAt": 1, status: 1 });
 ticketSchema.index({ subject: "text" });
 
 module.exports = mongoose.model("Ticket", ticketSchema);

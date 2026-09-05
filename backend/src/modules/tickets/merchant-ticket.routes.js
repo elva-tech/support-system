@@ -21,6 +21,7 @@ router.use(merchantAuthenticate);
 router.use(requireMerchantTenantMembership);
 
 router.get("/modules", merchantTicketController.listModules);
+router.get("/priorities", merchantTicketController.listCustomerPriorities);
 router.get("/stats", merchantTicketController.getStats);
 router.get("/", merchantTicketController.list);
 router.post("/", createTicketValidation, validate, merchantTicketController.create);
@@ -28,6 +29,9 @@ router.post("/", createTicketValidation, validate, merchantTicketController.crea
 router.post("/:id/reply", replyValidation, validate, merchantCommController.merchantReply);
 router.get("/:id/timeline", ticketIdParamValidation, validate, merchantCommController.merchantTimeline);
 router.post("/:id/attachments", ticketIdParamValidation, validate, handleUpload, merchantCommController.merchantUpload);
+router.post("/:id/close", ticketIdParamValidation, validate, merchantTicketController.closeTicket);
+router.post("/:id/reopen", ticketIdParamValidation, validate, merchantTicketController.reopenTicket);
+router.get("/:id/sla", ticketIdParamValidation, validate, merchantTicketController.getSla);
 
 router.get("/:id", ticketIdParamValidation, validate, merchantTicketController.getById);
 

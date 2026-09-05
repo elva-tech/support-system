@@ -74,6 +74,18 @@ export class TicketService {
     });
   }
 
+  resolve(id: string, notes?: string): Observable<ApiResponse<Ticket>> {
+    return this.http.post<ApiResponse<Ticket>>(`${this.baseUrl}/${id}/resolve`, { notes });
+  }
+
+  updatePriority(id: string, priority: string): Observable<ApiResponse<Ticket>> {
+    return this.http.patch<ApiResponse<Ticket>>(`${this.baseUrl}/${id}/priority`, { priority });
+  }
+
+  getSla(id: string): Observable<ApiResponse<unknown>> {
+    return this.http.get<ApiResponse<unknown>>(`${this.baseUrl}/${id}/sla`);
+  }
+
   transfer(id: string, teamId: string): Observable<ApiResponse<Ticket>> {
     return this.http.patch<ApiResponse<Ticket>>(`${this.baseUrl}/${id}/transfer`, { teamId });
   }

@@ -56,6 +56,20 @@ const streamLogo = asyncHandler(async (req, res) => {
   res.send(file.buffer);
 });
 
+const getServiceManagement = asyncHandler(async (req, res) => {
+  const data = await workspaceService.getServiceManagementSettings(req.tenant._id);
+  res.json({ data });
+});
+
+const updateServiceManagement = asyncHandler(async (req, res) => {
+  const data = await workspaceService.updateServiceManagementSettings(
+    req.tenant._id,
+    req.body,
+    actorCtx(req)
+  );
+  res.json({ message: "Service management settings updated", data });
+});
+
 module.exports = {
   getSettings,
   getSetupStatus,
@@ -63,6 +77,8 @@ module.exports = {
   updateOrganization,
   updateBranding,
   updateSupport,
+  getServiceManagement,
+  updateServiceManagement,
   skipStep,
   uploadLogo,
   deleteLogo,

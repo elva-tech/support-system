@@ -43,6 +43,10 @@ import { TicketTimelineComponent } from '../../../shared/components/ticket-timel
               <p class="font-medium text-slate-900">{{ moduleLabel(t) }}</p>
             </div>
             <div>
+              <p class="text-sm text-slate-500">Priority</p>
+              <p class="font-medium text-slate-900">{{ t.priority || 'MEDIUM' }}</p>
+            </div>
+            <div>
               <p class="text-sm text-slate-500">Created</p>
               <p class="font-medium text-slate-900">{{ t.createdAt | date: 'medium' }}</p>
             </div>
@@ -55,6 +59,28 @@ import { TicketTimelineComponent } from '../../../shared/components/ticket-timel
               <p class="font-medium text-slate-900">{{ teamLabel(t) }}</p>
             </div>
           </div>
+
+          @if (t.status === 'RESOLVED') {
+            <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              <p class="font-medium">Your ticket has been resolved.</p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button type="button" class="btn-primary" [disabled]="lifecycleBusy()" (click)="closeTicket()">
+                  Close Ticket
+                </button>
+                <button type="button" class="btn-secondary" [disabled]="lifecycleBusy()" (click)="reopenTicket()">
+                  Reopen Ticket
+                </button>
+              </div>
+            </div>
+          }
+          @if (t.status === 'CLOSED') {
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
+              <p class="font-medium">This ticket is closed.</p>
+              <button type="button" class="btn-secondary mt-3" [disabled]="lifecycleBusy()" (click)="reopenTicket()">
+                Reopen Ticket
+              </button>
+            </div>
+          }
         </div>
 
         <div class="card">
@@ -101,6 +127,7 @@ export class MerchantTicketDetailComponent implements OnInit {
   readonly uploading = signal(false);
   readonly selectedFile = signal<File | null>(null);
   readonly successMessage = signal('');
+  readonly lifecycleBusy = signal(false);
 
   readonly replyForm = this.fb.nonNullable.group({
     message: ['', [Validators.required, Validators.maxLength(5000)]]
@@ -135,6 +162,38 @@ export class MerchantTicketDetailComponent implements OnInit {
     this.successMessage.set(message);
     this.error.set('');
     setTimeout(() => this.successMessage.set(''), 4000);
+  }
+
+  closeTicket(): void {
+    this.lifecycleBusy.set(true);
+    this.api.close(this.ticketId).subscribe({
+      next: (res) => {
+        this.ticket.set(res.data);
+        this.loadTimeline();
+        this.lifecycleBusy.set(false);
+        this.flashSuccess('Ticket closed.');
+      },
+      error: (err: HttpErrorResponse) => {
+        this.error.set(err.error?.message || 'Failed to close ticket');
+        this.lifecycleBusy.set(false);
+      }
+    });
+  }
+
+  reopenTicket(): void {
+    this.lifecycleBusy.set(true);
+    this.api.reopen(this.ticketId).subscribe({
+      next: (res) => {
+        this.ticket.set(res.data);
+        this.loadTimeline();
+        this.lifecycleBusy.set(false);
+        this.flashSuccess('Ticket reopened.');
+      },
+      error: (err: HttpErrorResponse) => {
+        this.error.set(err.error?.message || 'Failed to reopen ticket');
+        this.lifecycleBusy.set(false);
+      }
+    });
   }
 
   sendReply(): void {

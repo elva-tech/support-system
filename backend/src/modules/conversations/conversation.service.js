@@ -164,6 +164,14 @@ const addReply = async (
       },
       { tenantId: ticket.tenantId || null }
     );
+
+    // First response SLA marker (idempotent)
+    const ticketDoc = await Ticket.findById(ticketId);
+    if (ticketDoc?.sla?.currentCycle && !ticketDoc.sla.currentCycle.firstResponseAt) {
+      ticketDoc.sla.currentCycle.firstResponseAt = new Date();
+      ticketDoc.markModified("sla");
+      await ticketDoc.save();
+    }
   }
 
   if (
@@ -226,45 +234,46 @@ const addSystemEvent = async (ticketId, message) => {
   });
 };
 
-const updateStatus = async (ticketId, status, agent, { closureNotes } = {}) => {
+const updateStatus = async (ticketId, status, agent, { closureNotes, tenantId } = {}) => {
   if (!ALL_TICKET_STATUSES.includes(status)) {
     throw new ApiError(400, "Invalid ticket status");
   }
 
+  // Agents resolve; clients permanently close. Map CLOSED attempts away from agent API.
   if (status === TICKET_STATUSES.CLOSED) {
-    const notes = String(closureNotes || "").trim();
-    if (!notes) {
-      throw new ApiError(400, "Closure notes are required when closing a ticket");
-    }
+    throw new ApiError(
+      400,
+      "Agents mark tickets as RESOLVED. Clients close resolved tickets from the portal."
+    );
+  }
+
+  if (status === TICKET_STATUSES.RESOLVED) {
+    const lifecycle = require("../tickets/ticket-lifecycle.service");
+    return lifecycle.resolveTicket(ticketId, agent, {
+      tenantId,
+      notes: closureNotes
+    });
   }
 
   const ticket = await Ticket.findById(ticketId);
   if (!ticket) {
     throw new ApiError(404, "Ticket not found");
   }
+  if (tenantId && ticket.tenantId && !idsEqual(ticket.tenantId, tenantId)) {
+    throw new ApiError(404, "Ticket not found");
+  }
 
   const previousStatus = ticket.status;
   const previousAssignee = ticket.assignedTo;
   if (previousStatus === status) {
-    return ticketService.getById(ticketId);
+    return ticketService.getById(ticketId, { tenantId });
   }
 
   ticket.status = status;
-  if (status === TICKET_STATUSES.CLOSED) {
-    ticket.closureNotes = String(closureNotes).trim();
-  }
   await ticket.save();
 
   const agentName = `${agent.firstName} ${agent.lastName}`;
-
-  if (status === TICKET_STATUSES.CLOSED) {
-    await addSystemEvent(
-      ticketId,
-      `Ticket closed by ${agentName}. Closure notes: ${String(closureNotes).trim()}`
-    );
-  } else {
-    await addSystemEvent(ticketId, `Status changed from ${previousStatus} to ${status} by ${agentName}`);
-  }
+  await addSystemEvent(ticketId, `Status changed from ${previousStatus} to ${status} by ${agentName}`);
 
   await logAudit({
     entityType: ENTITY_TYPES.TICKET,
@@ -277,23 +286,9 @@ const updateStatus = async (ticketId, status, agent, { closureNotes } = {}) => {
     metadata: {
       ticketNumber: ticket.ticketNumber,
       previousStatus,
-      newStatus: status,
-      ...(status === TICKET_STATUSES.CLOSED ? { closureNotes: String(closureNotes).trim() } : {})
+      newStatus: status
     }
   });
-
-  if (status === TICKET_STATUSES.RESOLVED) {
-    await notificationService.createEvent(
-      WORKER_NOTIFICATION_TYPES.TICKET_RESOLVED,
-      ticket._id,
-      {
-        ticketNumber: ticket.ticketNumber,
-        previousStatus,
-        newStatus: status
-      },
-      { tenantId: ticket.tenantId || null }
-    );
-  }
 
   const becameInactive =
     ACTIVE_TICKET_STATUSES.includes(previousStatus) && !ACTIVE_TICKET_STATUSES.includes(status);
@@ -303,7 +298,7 @@ const updateStatus = async (ticketId, status, agent, { closureNotes } = {}) => {
     await onAgentPotentiallyFreed(previousAssignee, ticket.teamId);
   }
 
-  return ticketService.getById(ticketId);
+  return ticketService.getById(ticketId, { tenantId });
 };
 
 const transferTicket = async (ticketId, teamId, agent, { tenantId } = {}) => {

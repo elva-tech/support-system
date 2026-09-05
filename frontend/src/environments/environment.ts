@@ -13,6 +13,7 @@ export const environment = {
    * - platform → Platform Administration UI on localhost
    */
   portalMode: 'auto' as 'auto' | 'platform' | 'tenant',
+  // portalMode: 'platform' as 'auto' | 'platform' | 'tenant',
   /** Send X-Tenant-Slug in non-production when backend header override is enabled */
   sendTenantSlugHeader: true
 };

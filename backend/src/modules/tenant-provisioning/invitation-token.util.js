@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const env = require("../../config/env");
+const workspaceDomain = require("../tenants/workspace-domain.service");
 
 const hashInvitationToken = (rawToken) =>
   crypto.createHash("sha256").update(String(rawToken), "utf8").digest("hex");
@@ -27,19 +28,11 @@ const getInvitationExpiryDate = (fromDate = new Date()) => {
   return new Date(fromDate.getTime() + hours * 60 * 60 * 1000);
 };
 
-const buildWorkspaceUrl = (slug) => {
-  const protocol = env.tenantProvisioning.workspaceProtocol;
-  const domain = env.tenant.baseDomain;
-  return `${protocol}://${String(slug).toLowerCase()}.${domain}`;
-};
+/** @deprecated Prefer workspace-domain.service — kept for backward-compatible imports */
+const buildWorkspaceUrl = (slug) => workspaceDomain.buildWorkspaceUrl(slug);
 
-const buildInvitationUrl = (slug, rawToken) => {
-  const workspaceUrl = buildWorkspaceUrl(slug);
-  const path = env.tenantProvisioning.onboardingPath.startsWith("/")
-    ? env.tenantProvisioning.onboardingPath
-    : `/${env.tenantProvisioning.onboardingPath}`;
-  return `${workspaceUrl}${path}?token=${encodeURIComponent(rawToken)}`;
-};
+const buildInvitationUrl = (slug, rawToken) =>
+  workspaceDomain.buildInvitationUrl(slug, rawToken);
 
 /**
  * Split "John Doe" → { firstName, lastName }. Single token uses lastName "-".

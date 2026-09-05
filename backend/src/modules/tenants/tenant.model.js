@@ -38,6 +38,11 @@ const tenantSettingsSchema = new mongoose.Schema(
     notifications: {
       type: mongoose.Schema.Types.Mixed,
       default: {}
+    },
+    /** Priorities, SLA policies, escalation, business hours */
+    serviceManagement: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null
     }
   },
   { _id: false }

@@ -58,6 +58,10 @@ import { TicketTimelineComponent } from '../../shared/components/ticket-timeline
               <p class="font-medium text-slate-900">{{ assigneeLabel(t) }}</p>
             </div>
             <div>
+              <p class="text-sm text-slate-500">Priority</p>
+              <p class="font-medium text-slate-900">{{ t.priority || 'MEDIUM' }}</p>
+            </div>
+            <div>
               <p class="text-sm text-slate-500">Created</p>
               <p class="font-medium text-slate-900">{{ t.createdAt | date: 'medium' }}</p>
             </div>
@@ -66,6 +70,38 @@ import { TicketTimelineComponent } from '../../shared/components/ticket-timeline
               <p class="font-medium text-slate-900">{{ t.updatedAt | date: 'medium' }}</p>
             </div>
           </div>
+
+          @if (t.slaStatus?.hasSla && t.slaStatus?.currentCycle; as cycle) {
+            <div class="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+              <p class="font-semibold text-slate-900">SLA</p>
+              <p class="mt-1 text-slate-700">
+                Resolution:
+                @if (cycle.resolutionState === 'BREACHED') {
+                  <span class="font-medium text-red-700">BREACHED</span>
+                } @else if (cycle.resolutionState === 'AT_RISK' || cycle.resolutionState === 'WARNING') {
+                  <span class="font-medium text-amber-700"
+                    >{{ cycle.resolutionState }} ({{ cycle.resolutionPercent || 0 }}%)</span
+                  >
+                } @else {
+                  <span class="font-medium text-emerald-700"
+                    >{{ cycle.resolutionState || 'ON_TRACK' }}
+                    @if (cycle.remainingResolutionMinutes != null) {
+                      — {{ cycle.remainingResolutionMinutes }}m remaining
+                    }
+                  </span>
+                }
+              </p>
+              <p class="mt-1 text-xs text-slate-500">
+                Response:
+                {{
+                  cycle.firstResponseAt
+                    ? 'Responded within cycle'
+                    : (cycle.responseState || 'ON_TRACK') + ' (' + (cycle.responsePercent || 0) + '%)'
+                }}
+                · Cycle {{ cycle.cycleNumber }}
+              </p>
+            </div>
+          }
         </div>
 
         <div class="grid gap-6 lg:grid-cols-3">
@@ -117,35 +153,19 @@ import { TicketTimelineComponent } from '../../shared/components/ticket-timeline
                   <option [value]="status">{{ status.replace('_', ' ') }}</option>
                 }
               </select>
+              <p class="text-xs text-slate-500">
+                Mark RESOLVED when work is done. Clients close resolved tickets from their portal.
+              </p>
             </div>
 
-            @if (showCloseDialog()) {
-              <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
-                <div class="card w-full max-w-lg space-y-4 shadow-xl">
-                  <h3 class="text-lg font-semibold text-slate-900">Close ticket</h3>
-                  <p class="text-sm text-slate-600">
-                    Add closure notes before closing this ticket. The merchant will receive these notes in the closure email.
-                  </p>
-                  <form [formGroup]="closeForm" (ngSubmit)="confirmClose()" class="space-y-4">
-                    <textarea
-                      class="form-input"
-                      rows="5"
-                      formControlName="closureNotes"
-                      placeholder="Describe how the issue was resolved or why the ticket is being closed..."
-                    ></textarea>
-                    @if (closeForm.controls.closureNotes.touched && closeForm.controls.closureNotes.invalid) {
-                      <p class="text-sm text-red-600">Closure notes are required.</p>
-                    }
-                    <div class="flex justify-end gap-3">
-                      <button type="button" class="btn-secondary" (click)="cancelClose()">Cancel</button>
-                      <button type="submit" class="btn-primary" [disabled]="closeForm.invalid || closingTicket()">
-                        {{ closingTicket() ? 'Closing...' : 'Close ticket' }}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            }
+            <div class="card space-y-4">
+              <h3 class="text-lg font-semibold text-slate-900">Priority</h3>
+              <select class="form-input" [value]="t.priority || 'MEDIUM'" (change)="onPriorityChange($event)">
+                @for (p of priorities; track p) {
+                  <option [value]="p">{{ p }}</option>
+                }
+              </select>
+            </div>
 
             <div class="card space-y-4">
               <h3 class="text-lg font-semibold text-slate-900">Transfer Team</h3>
@@ -188,9 +208,9 @@ export class TicketDetailComponent implements OnInit {
     'OPEN',
     'IN_PROGRESS',
     'WAITING_FOR_CUSTOMER',
-    'RESOLVED',
-    'CLOSED'
+    'RESOLVED'
   ];
+  readonly priorities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 
   readonly ticket = signal<Ticket | null>(null);
   readonly timeline = signal<TimelineItem[]>([]);
@@ -201,8 +221,6 @@ export class TicketDetailComponent implements OnInit {
   readonly sendingNote = signal(false);
   readonly uploading = signal(false);
   readonly selectedFile = signal<File | null>(null);
-  readonly showCloseDialog = signal(false);
-  readonly closingTicket = signal(false);
 
   readonly replyForm = this.fb.nonNullable.group({
     message: ['', [Validators.required, Validators.maxLength(5000)]]
@@ -210,10 +228,6 @@ export class TicketDetailComponent implements OnInit {
 
   readonly noteForm = this.fb.nonNullable.group({
     message: ['', [Validators.required, Validators.maxLength(5000)]]
-  });
-
-  readonly closeForm = this.fb.nonNullable.group({
-    closureNotes: ['', [Validators.required, Validators.maxLength(5000)]]
   });
 
   private ticketId = '';
@@ -285,50 +299,32 @@ export class TicketDetailComponent implements OnInit {
   onStatusChange(event: Event): void {
     const select = event.target as HTMLSelectElement;
     const status = select.value as TicketStatus;
-    const current = this.ticket()?.status;
-
-    if (status === 'CLOSED') {
-      if (current) {
-        select.value = current;
-      }
-      this.closeForm.reset();
-      this.showCloseDialog.set(true);
-      return;
-    }
-
     this.applyStatus(status);
   }
 
-  confirmClose(): void {
-    if (this.closeForm.invalid) {
-      this.closeForm.markAllAsTouched();
-      return;
-    }
-
-    this.closingTicket.set(true);
-    this.api
-      .updateStatus(this.ticketId, 'CLOSED', this.closeForm.controls.closureNotes.value)
-      .subscribe({
-        next: (res) => {
-          this.ticket.set(res.data);
-          this.showCloseDialog.set(false);
-          this.closeForm.reset();
-          this.loadTimeline();
-          this.closingTicket.set(false);
-        },
-        error: (err: HttpErrorResponse) => {
-          this.error.set(err.error?.message || 'Failed to close ticket');
-          this.closingTicket.set(false);
-        }
-      });
-  }
-
-  cancelClose(): void {
-    this.showCloseDialog.set(false);
-    this.closeForm.reset();
+  onPriorityChange(event: Event): void {
+    const priority = (event.target as HTMLSelectElement).value;
+    this.api.updatePriority(this.ticketId, priority).subscribe({
+      next: (res) => {
+        this.ticket.set(res.data);
+        this.loadTimeline();
+      },
+      error: (err: HttpErrorResponse) => this.error.set(err.error?.message || 'Priority update failed')
+    });
   }
 
   private applyStatus(status: TicketStatus): void {
+    if (status === 'RESOLVED') {
+      this.api.resolve(this.ticketId).subscribe({
+        next: (res) => {
+          this.ticket.set(res.data);
+          this.loadTimeline();
+        },
+        error: (err: HttpErrorResponse) => this.error.set(err.error?.message || 'Resolve failed')
+      });
+      return;
+    }
+
     this.api.updateStatus(this.ticketId, status).subscribe({
       next: (res) => {
         this.ticket.set(res.data);

@@ -65,12 +65,42 @@ export interface WorkspaceSupportSettings {
   supportEmailDisplayName?: string;
 }
 
+export interface ServiceManagementSettings {
+  priorities?: Array<{
+    code: string;
+    label: string;
+    enabled?: boolean;
+    customerSelectable?: boolean;
+    displayOrder?: number;
+  }>;
+  businessHours?: {
+    timezone?: string;
+    workingDays?: number[];
+    startTime?: string;
+    endTime?: string;
+  };
+  slaPolicies?: Array<{
+    priority: string;
+    responseTargetMinutes: number;
+    resolutionTargetMinutes: number;
+    useBusinessHours?: boolean;
+  }>;
+  escalationRules?: Array<{
+    metric: string;
+    thresholdPercent: number;
+    action: string;
+    enabled?: boolean;
+  }>;
+  agentMaxActiveTickets?: number;
+}
+
 export interface WorkspaceSettings {
   tenant: { id: string; name: string; slug: string; status: string };
   organization: WorkspaceOrganization;
   branding: WorkspaceBrandingSettings;
   support?: WorkspaceSupportSettings;
   notifications: Record<string, unknown>;
+  serviceManagement?: ServiceManagementSettings;
   setup: WorkspaceSetup;
   emailBranding?: { supportDisplayName: string; tenantName: string };
 }
@@ -134,6 +164,19 @@ export class WorkspaceApiService {
   > {
     return this.http.patch<ApiResponse<{ support: WorkspaceSupportSettings; branding: WorkspaceBrandingSettings }>>(
       `${this.base}/support`,
+      payload
+    );
+  }
+
+  getServiceManagement(): Observable<ApiResponse<ServiceManagementSettings>> {
+    return this.http.get<ApiResponse<ServiceManagementSettings>>(`${this.base}/service-management`);
+  }
+
+  updateServiceManagement(
+    payload: Partial<ServiceManagementSettings>
+  ): Observable<ApiResponse<ServiceManagementSettings>> {
+    return this.http.patch<ApiResponse<ServiceManagementSettings>>(
+      `${this.base}/service-management`,
       payload
     );
   }

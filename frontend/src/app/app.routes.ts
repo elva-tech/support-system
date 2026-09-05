@@ -107,7 +107,8 @@ export const routes: Routes = [
   },
   {
     path: 'login',
-    canMatch: [tenantPortalCanMatch],
+    // Platform `/login` is matched first via platformPortalCanMatch.
+    // Tenant/unknown fall through here — Angular 20 forbids redirectTo + canMatch together (NG04014).
     redirectTo: 'auth/login',
     pathMatch: 'full'
   },

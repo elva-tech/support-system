@@ -194,6 +194,10 @@ const runProvisioningPipeline = async (provisioning, { actor, tenantPayload } = 
       };
       settings.branding = settings.branding || {};
       settings.notifications = settings.notifications || {};
+      if (!settings.serviceManagement) {
+        const { defaultServiceManagement } = require("../../shared/constants/service-management");
+        settings.serviceManagement = defaultServiceManagement();
+      }
       tenant.settings = settings;
 
       // Workspace setup starts NOT_STARTED (distinct from provisioning READY)

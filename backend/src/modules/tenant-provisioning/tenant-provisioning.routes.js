@@ -19,6 +19,13 @@ const { PLATFORM_SUPER_ADMIN, PLATFORM_ADMIN, PLATFORM_SUPPORT } = PLATFORM_ROLE
  * Preferred business onboarding workflow.
  * Must be registered before /tenants/:tenantId routes.
  */
+router.get(
+  "/tenants/slug-availability",
+  authenticatePlatformAdmin,
+  requirePlatformRole(PLATFORM_SUPER_ADMIN, PLATFORM_ADMIN, PLATFORM_SUPPORT),
+  controller.checkSlugAvailability
+);
+
 router.post(
   "/tenants/provision",
   authenticatePlatformAdmin,

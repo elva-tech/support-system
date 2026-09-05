@@ -5,6 +5,31 @@ export type TicketStatus =
   | 'RESOLVED'
   | 'CLOSED';
 
+export type TicketPriority = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface TicketSlaCycleView {
+  cycleNumber: number;
+  startedAt?: string;
+  responseDueAt?: string;
+  resolutionDueAt?: string;
+  firstResponseAt?: string | null;
+  resolvedAt?: string | null;
+  responseState?: string;
+  resolutionState?: string;
+  responsePercent?: number;
+  resolutionPercent?: number;
+  responseBreachedAt?: string | null;
+  resolutionBreachedAt?: string | null;
+  remainingResolutionMinutes?: number;
+  triggeredThresholds?: string[];
+}
+
+export interface TicketSlaStatus {
+  priority?: TicketPriority;
+  hasSla: boolean;
+  currentCycle?: TicketSlaCycleView | null;
+}
+
 export interface TicketRef {
   _id: string;
   name: string;
@@ -36,8 +61,13 @@ export interface Ticket {
   subject: string;
   description: string;
   status: TicketStatus;
+  priority?: TicketPriority;
   assignedTo?: TicketAssigneeRef | string | null;
   assignedAt?: string | null;
+  resolvedAt?: string | null;
+  closedAt?: string | null;
+  reopenedAt?: string | null;
+  slaStatus?: TicketSlaStatus;
   createdAt: string;
   updatedAt: string;
 }

@@ -61,6 +61,18 @@ router.patch(
   workspaceController.updateSupport
 );
 
+router.get(
+  "/service-management",
+  authorize(ROLES.ADMIN),
+  workspaceController.getServiceManagement
+);
+
+router.patch(
+  "/service-management",
+  authorize(ROLES.ADMIN),
+  workspaceController.updateServiceManagement
+);
+
 router.post(
   "/branding/logo",
   authorize(ROLES.ADMIN),

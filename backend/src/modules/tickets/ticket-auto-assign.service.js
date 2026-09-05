@@ -215,6 +215,7 @@ const autoAssignOnCreate = async (ticket) => {
 
 module.exports = {
   autoAssignOnCreate,
+  assignTicketToAgent,
   pickAvailableAgent,
   processQueuedTickets,
   onAgentPotentiallyFreed,

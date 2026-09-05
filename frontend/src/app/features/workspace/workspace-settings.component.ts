@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
-import { WorkspaceApiService } from '../../core/services/workspace-api.service';
+import { WorkspaceApiService, ServiceManagementSettings } from '../../core/services/workspace-api.service';
 import { BrandingService } from '../../core/portal/branding.service';
 import { CustomerTerminologyService } from '../../core/portal/customer-terminology.service';
 import { HEX_COLOR_PATTERN, CUSTOMER_LABEL_COPY, CustomerLabel } from '../../core/portal/default-branding';
@@ -170,6 +170,87 @@ import { formatApiError } from '../../shared/utils/api-error.util';
         <button type="submit" class="btn-primary" [disabled]="saving()">Save support preferences</button>
       </form>
 
+      <div class="card space-y-4">
+        <h2 class="text-lg font-semibold">Service management</h2>
+        <p class="text-xs text-slate-500">
+          Priorities, SLA targets, escalation thresholds, and business hours for this workspace (admin only).
+        </p>
+        @if (sm(); as smCfg) {
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-left text-sm">
+              <thead>
+                <tr class="border-b text-slate-500">
+                  <th class="py-2 pr-3">Priority</th>
+                  <th class="py-2 pr-3">Customer selectable</th>
+                  <th class="py-2 pr-3">Response (min)</th>
+                  <th class="py-2 pr-3">Resolution (min)</th>
+                  <th class="py-2">Business hours</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (p of smCfg.priorities || []; track p.code) {
+                  <tr class="border-b border-slate-100">
+                    <td class="py-2 pr-3 font-medium">{{ p.label || p.code }}</td>
+                    <td class="py-2 pr-3">
+                      <input
+                        type="checkbox"
+                        [checked]="!!p.customerSelectable"
+                        (change)="toggleCustomerSelectable(p.code, $event)"
+                      />
+                    </td>
+                    <td class="py-2 pr-3">{{ policyMinutes(p.code, 'response') }}</td>
+                    <td class="py-2 pr-3">
+                      <input
+                        class="form-input w-28"
+                        type="number"
+                        min="15"
+                        [value]="policyMinutes(p.code, 'resolution')"
+                        (change)="onResolutionMinutes(p.code, $event)"
+                      />
+                    </td>
+                    <td class="py-2">{{ policyUsesBh(p.code) ? 'Yes' : 'No' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label class="form-label">Timezone</label>
+              <input class="form-input" [value]="smCfg.businessHours?.timezone || ''" (change)="onBhTimezone($event)" />
+            </div>
+            <div>
+              <label class="form-label">Working hours</label>
+              <div class="flex gap-2">
+                <input
+                  class="form-input"
+                  [value]="smCfg.businessHours?.startTime || '09:00'"
+                  (change)="onBhStart($event)"
+                />
+                <input
+                  class="form-input"
+                  [value]="smCfg.businessHours?.endTime || '18:00'"
+                  (change)="onBhEnd($event)"
+                />
+              </div>
+            </div>
+          </div>
+          <div>
+            <p class="text-sm font-medium text-slate-800">Escalation thresholds (resolution %)</p>
+            <ul class="mt-2 space-y-1 text-sm text-slate-600">
+              @for (r of smCfg.escalationRules || []; track r.thresholdPercent + r.action) {
+                <li>{{ r.thresholdPercent }}% → {{ r.action }}</li>
+              }
+            </ul>
+          </div>
+          <button type="button" class="btn-primary" [disabled]="saving()" (click)="saveServiceManagement()">
+            Save service management
+          </button>
+        } @else {
+          <p class="text-sm text-slate-500">Loading service management…</p>
+        }
+      </div>
+
       <div class="card">
         <h2 class="text-lg font-semibold">Configuration shortcuts</h2>
         <div class="mt-4 flex flex-wrap gap-3 text-sm">
@@ -198,7 +279,9 @@ export class WorkspaceSettingsComponent implements OnInit {
   readonly saving = signal(false);
   readonly hasLogo = signal(false);
   readonly logoPreview = signal<string | null>(null);
+  readonly sm = signal<ServiceManagementSettings | null>(null);
   private logoFile: File | null = null;
+  private smDraft: ServiceManagementSettings | null = null;
 
   readonly orgForm = this.fb.nonNullable.group({
     displayName: ['', Validators.required],
@@ -289,6 +372,102 @@ export class WorkspaceSettingsComponent implements OnInit {
         }
       },
       error: (err: HttpErrorResponse) => this.error.set(formatApiError(err))
+    });
+
+    this.api.getServiceManagement().subscribe({
+      next: (res) => {
+        this.smDraft = structuredClone(res.data);
+        this.sm.set(this.smDraft);
+      },
+      error: (err: HttpErrorResponse) => this.error.set(formatApiError(err))
+    });
+  }
+
+  policyMinutes(code: string, kind: 'response' | 'resolution'): number {
+    const policy = (this.sm()?.slaPolicies || []).find((p) => p.priority === code);
+    if (!policy) return 0;
+    return kind === 'response' ? policy.responseTargetMinutes : policy.resolutionTargetMinutes;
+  }
+
+  policyUsesBh(code: string): boolean {
+    return Boolean((this.sm()?.slaPolicies || []).find((p) => p.priority === code)?.useBusinessHours);
+  }
+
+  toggleCustomerSelectable(code: string, event: Event): void {
+    if (!this.smDraft?.priorities) return;
+    const checked = (event.target as HTMLInputElement).checked;
+    this.smDraft = {
+      ...this.smDraft,
+      priorities: this.smDraft.priorities.map((p) =>
+        p.code === code ? { ...p, customerSelectable: checked } : p
+      )
+    };
+    this.sm.set(this.smDraft);
+  }
+
+  onResolutionMinutes(code: string, event: Event): void {
+    if (!this.smDraft?.slaPolicies) return;
+    const value = Number((event.target as HTMLInputElement).value);
+    this.smDraft = {
+      ...this.smDraft,
+      slaPolicies: this.smDraft.slaPolicies.map((p) =>
+        p.priority === code ? { ...p, resolutionTargetMinutes: value } : p
+      )
+    };
+    this.sm.set(this.smDraft);
+  }
+
+  onBhTimezone(event: Event): void {
+    if (!this.smDraft) return;
+    this.smDraft = {
+      ...this.smDraft,
+      businessHours: {
+        ...(this.smDraft.businessHours || {}),
+        timezone: (event.target as HTMLInputElement).value
+      }
+    };
+    this.sm.set(this.smDraft);
+  }
+
+  onBhStart(event: Event): void {
+    if (!this.smDraft) return;
+    this.smDraft = {
+      ...this.smDraft,
+      businessHours: {
+        ...(this.smDraft.businessHours || {}),
+        startTime: (event.target as HTMLInputElement).value
+      }
+    };
+    this.sm.set(this.smDraft);
+  }
+
+  onBhEnd(event: Event): void {
+    if (!this.smDraft) return;
+    this.smDraft = {
+      ...this.smDraft,
+      businessHours: {
+        ...(this.smDraft.businessHours || {}),
+        endTime: (event.target as HTMLInputElement).value
+      }
+    };
+    this.sm.set(this.smDraft);
+  }
+
+  saveServiceManagement(): void {
+    if (!this.smDraft) return;
+    this.saving.set(true);
+    this.error.set('');
+    this.api.updateServiceManagement(this.smDraft).subscribe({
+      next: (res) => {
+        this.smDraft = structuredClone(res.data);
+        this.sm.set(this.smDraft);
+        this.success.set('Service management updated');
+        this.saving.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.error.set(formatApiError(err));
+        this.saving.set(false);
+      }
     });
   }
 
