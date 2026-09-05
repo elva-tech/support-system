@@ -71,6 +71,19 @@ const write = (level, message, meta) => {
 };
 
 /**
+ * Redact secrets that appear in URL paths/query (e.g. invitation tokens).
+ */
+const sanitizeLogPath = (rawPath = "") => {
+  let path = String(rawPath || "");
+  path = path.replace(
+    /\/api\/onboarding\/invitation\/[^/?#]+/gi,
+    "/api/onboarding/invitation/[REDACTED]"
+  );
+  path = path.replace(/([?&](?:token|access_token|refresh_token)=)[^&]*/gi, "$1[REDACTED]");
+  return path;
+};
+
+/**
  * Build safe request-scoped log fields from Express req (when available).
  */
 const buildRequestLogFields = (req = null) => {
@@ -81,7 +94,7 @@ const buildRequestLogFields = (req = null) => {
   const fields = {
     requestId: req.requestId || undefined,
     method: req.method,
-    path: req.originalUrl || req.path
+    path: sanitizeLogPath(req.originalUrl || req.path)
   };
 
   if (req.tenant?._id) {

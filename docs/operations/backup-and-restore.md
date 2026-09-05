@@ -35,6 +35,20 @@ Do **not** embed backup jobs inside the Node.js API process.
 
 ## 5. Restore procedure (high level)
 
+### Atlas
+1. Use Atlas UI/API restore to a **new** cluster or PITR window.
+2. Point staging API at restored URI first.
+
+### Self-hosted / mongodump
+
+```bash
+# Backup
+mongodump --uri="$MONGODB_URI" --out=/secure/backups/elva-$(date +%Y%m%d)
+
+# Restore to a dedicated verify URI (never overwrite prod blindly)
+mongorestore --uri="$MONGODB_RESTORE_URI" --drop /secure/backups/elva-YYYYMMDD
+```
+
 1. Declare incident / maintenance window if customer-facing.
 2. Identify backup: timestamp, environment, APP_VERSION / GIT_SHA.
 3. Provision restore target (prefer restore to **new** cluster/DB first).
@@ -43,6 +57,15 @@ Do **not** embed backup jobs inside the Node.js API process.
 6. Run verification (section 6–7).
 7. Only then cut over application `MONGODB_URI` (or promote restored cluster).
 
+### Migration-aware recovery
+
+After restore, run `npm run migrate:status`. If changelog lags the restored data (or vice versa), do **not** blindly `migrate:up`/`down` — reconcile with the backup’s expected schema version.
+
+### Point-in-time
+
+Atlas PITR (when available) reduces data-loss window versus daily dumps alone.
+
+**Staging drill required:** perform a full dump→restore→smoke cycle in staging before relying on production backups.
 ## 6. Restore verification
 
 - `GET /health` → `ok`

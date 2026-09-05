@@ -91,6 +91,16 @@ const validateEnvironment = () => {
       );
     }
 
+    if (process.env.TENANT_REJECT_HEADER_IN_PRODUCTION === "false") {
+      errors.push(
+        "TENANT_REJECT_HEADER_IN_PRODUCTION must not be false in production — reject X-Tenant-Slug when present"
+      );
+    }
+
+    if (process.env.LOG_OTP_TO_CONSOLE !== "false") {
+      errors.push("LOG_OTP_TO_CONSOLE must be false in production");
+    }
+
     if (process.env.ENSURE_ADMIN_ON_STARTUP === "true") {
       logger.warn(
         "ENSURE_ADMIN_ON_STARTUP=true in production — prefer intentional bootstrap scripts over auto-create on every start"

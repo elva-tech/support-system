@@ -58,10 +58,7 @@ router.post(
 
 router.post(
   "/email/poll",
-  authenticate,
-  requireTenantContext,
-  requireTenantMembership,
-  authorize(ROLES.ADMIN),
+  internalApiAuth,
   asyncHandler(async (_req, res) => {
     const result = await emailInboundService.pollInbox();
     res.json({ data: result });

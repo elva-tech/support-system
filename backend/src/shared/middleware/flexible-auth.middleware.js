@@ -4,6 +4,7 @@ const env = require("../../config/env");
 const User = require("../../modules/users/user.model");
 const merchantService = require("../../modules/merchants/merchant.service");
 const { PLATFORM_IDENTITY_TYPE } = require("../constants/platform");
+const { isUserLoginAllowed } = require("../constants/user-lifecycle");
 
 const flexibleAuth = async (req, res, next) => {
   const merchantToken = req.headers["x-merchant-session"];
@@ -32,12 +33,16 @@ const flexibleAuth = async (req, res, next) => {
         return next(new ApiError(401, "Tenant staff authentication required"));
       }
 
+      if (decoded.purpose && decoded.purpose !== "tenant") {
+        return next(new ApiError(401, "Tenant staff authentication required"));
+      }
+
       const user = await User.findById(decoded.sub)
         .select("-password")
         .populate("teamId", "name")
         .populate("applicationIds", "name code");
 
-      if (!user || !user.isActive) {
+      if (!user || !isUserLoginAllowed(user)) {
         return next(new ApiError(401, "Invalid or inactive account"));
       }
 

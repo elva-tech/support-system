@@ -10,7 +10,6 @@ const env = require("../../config/env");
 const { usesElvaNotifyNativeOtp } = require("../notifications/elva-notify.config");
 const onboardingEmail = require("../notifications/onboarding-email.service");
 const logger = require("../../shared/utils/logger");
-const { resolveTenantIdForApplication } = require("../tenants/resolve-tenant-id");
 const { stripClientTenantId, withTenantFilter } = require("../../shared/utils/tenant-scope.util");
 
 const OTP_EXPIRY_MS = env.otpExpiresMinutes * 60 * 1000;
@@ -54,10 +53,15 @@ const findActiveMerchantByEmail = async (email, { tenantId, silent = false } = {
 };
 
 const requestOtp = async (email, { tenantId } = {}) => {
+  if (!tenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
+
   const normalizedEmail = email.toLowerCase();
 
   const lockedSession = await OtpSession.findOne({
     email: normalizedEmail,
+    tenantId,
     lockedUntil: { $gt: new Date() }
   });
 
@@ -75,7 +79,7 @@ const requestOtp = async (email, { tenantId } = {}) => {
     );
   }
 
-  await OtpSession.deleteMany({ email: normalizedEmail, verified: false });
+  await OtpSession.deleteMany({ email: normalizedEmail, tenantId, verified: false });
 
   const nativeOtp = usesElvaNotifyNativeOtp();
   const otp = nativeOtp ? null : generateOtp();
@@ -83,6 +87,7 @@ const requestOtp = async (email, { tenantId } = {}) => {
 
   await OtpSession.create({
     email: normalizedEmail,
+    tenantId,
     otpCode: nativeOtp ? "EXTERNAL" : hashValue(otp),
     expiresAt,
     verified: false,
@@ -103,7 +108,7 @@ const requestOtp = async (email, { tenantId } = {}) => {
   });
 
   if (!delivery.success) {
-    await OtpSession.deleteMany({ email: normalizedEmail, verified: false });
+    await OtpSession.deleteMany({ email: normalizedEmail, tenantId, verified: false });
     logger.warn("OTP delivery failed", {
       email: normalizedEmail,
       provider: delivery.provider,
@@ -127,6 +132,10 @@ const requestOtp = async (email, { tenantId } = {}) => {
 };
 
 const verifyOtp = async (email, otpCode, sessionMeta = {}, { tenantId } = {}) => {
+  if (!tenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
+
   const normalizedEmail = email.toLowerCase();
 
   const merchant = await findActiveMerchantByEmail(normalizedEmail, { tenantId, silent: true });
@@ -136,6 +145,7 @@ const verifyOtp = async (email, otpCode, sessionMeta = {}, { tenantId } = {}) =>
 
   const session = await OtpSession.findOne({
     email: normalizedEmail,
+    tenantId,
     verified: false,
     expiresAt: { $gt: new Date() }
   }).sort({ createdAt: -1 });
@@ -262,26 +272,43 @@ const validateSession = async (sessionToken, sessionMeta = {}) => {
 const syncMerchant = async (data, { tenantId: contextTenantId } = {}) => {
   const payload = stripClientTenantId(data);
 
-  const applicationFilter = {
-    code: payload.applicationCode.toUpperCase(),
-    isActive: true
-  };
-  if (contextTenantId) {
-    applicationFilter.tenantId = contextTenantId;
+  let resolvedTenantId = contextTenantId || null;
+  if (!resolvedTenantId && payload.tenantSlug) {
+    const Tenant = require("../tenants/tenant.model");
+    const { normalizeTenantSlug } = require("../tenants/tenant.validation");
+    const slug = normalizeTenantSlug(payload.tenantSlug);
+    if (!slug) {
+      throw new ApiError(400, "Invalid tenantSlug");
+    }
+    const tenant = await Tenant.findOne({ slug }).select("_id");
+    if (!tenant) {
+      throw new ApiError(400, "Invalid tenantSlug");
+    }
+    resolvedTenantId = tenant._id;
   }
 
-  const application = await Application.findOne(applicationFilter);
+  if (!resolvedTenantId) {
+    throw new ApiError(
+      400,
+      "tenantSlug is required for merchant sync when tenant context is not provided"
+    );
+  }
+
+  const application = await Application.findOne({
+    code: payload.applicationCode.toUpperCase(),
+    isActive: true,
+    tenantId: resolvedTenantId
+  });
 
   if (!application) {
     throw new ApiError(400, `Application not found: ${payload.applicationCode}`);
   }
 
   const email = payload.email.toLowerCase();
-  const emailFilter = { email };
-  if (contextTenantId || application.tenantId) {
-    emailFilter.tenantId = contextTenantId || application.tenantId;
-  }
-  const existingByEmail = await MerchantProfile.findOne(emailFilter);
+  const existingByEmail = await MerchantProfile.findOne({
+    email,
+    tenantId: resolvedTenantId
+  });
 
   if (
     existingByEmail &&
@@ -291,10 +318,7 @@ const syncMerchant = async (data, { tenantId: contextTenantId } = {}) => {
     throw new ApiError(409, "Email already registered to another merchant");
   }
 
-  const tenantId =
-    contextTenantId ||
-    existingByEmail?.tenantId ||
-    (await resolveTenantIdForApplication(application));
+  const tenantId = resolvedTenantId;
 
   const merchant = await MerchantProfile.findOneAndUpdate(
     {

@@ -14,6 +14,7 @@ const { ALL_TICKET_STATUSES, TICKET_STATUSES, ACTIVE_TICKET_STATUSES } = require
 const { CONVERSATION_SOURCES } = require("../../shared/constants/communication-channels");
 const emailOutboundService = require("../email/email-outbound.service");
 const { mapAttachmentForClient } = require("../attachments/attachment.service");
+const { idsEqual } = require("../tenants/tenant-resolver.service");
 
 const driveService = createGoogleDriveService();
 
@@ -305,18 +306,36 @@ const updateStatus = async (ticketId, status, agent, { closureNotes } = {}) => {
   return ticketService.getById(ticketId);
 };
 
-const transferTicket = async (ticketId, teamId, agent) => {
+const transferTicket = async (ticketId, teamId, agent, { tenantId } = {}) => {
   const ticket = await Ticket.findById(ticketId);
   if (!ticket) {
     throw new ApiError(404, "Ticket not found");
   }
 
-  const newTeam = await Team.findById(teamId);
-  if (!newTeam || !newTeam.isActive) {
+  if (tenantId && ticket.tenantId && !idsEqual(ticket.tenantId, tenantId)) {
+    throw new ApiError(404, "Ticket not found");
+  }
+
+  const teamFilter = tenantId
+    ? { _id: teamId, tenantId, isActive: true }
+    : { _id: teamId, isActive: true };
+  // Fail closed when tenant context is available — never accept cross-tenant team ObjectIds.
+  if (!tenantId && ticket.tenantId) {
+    teamFilter.tenantId = ticket.tenantId;
+  }
+
+  const newTeam = await Team.findOne(teamFilter);
+  if (!newTeam) {
     throw new ApiError(400, "Invalid team");
   }
 
-  const previousTeam = await Team.findById(ticket.teamId);
+  const previousTeam = ticket.teamId
+    ? await Team.findOne(
+        ticket.tenantId
+          ? { _id: ticket.teamId, tenantId: ticket.tenantId }
+          : { _id: ticket.teamId }
+      )
+    : null;
   const previousTeamName = previousTeam?.name || "Unknown";
   const agentName = `${agent.firstName} ${agent.lastName}`;
 

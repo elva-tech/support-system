@@ -28,6 +28,10 @@ const authenticate = async (req, res, next) => {
       return next(new ApiError(401, "Tenant staff authentication required"));
     }
 
+    if (decoded.purpose && decoded.purpose !== "tenant") {
+      return next(new ApiError(401, "Tenant staff authentication required"));
+    }
+
     const user = await User.findById(decoded.sub)
       .select("-password")
       .populate("teamId", "name")

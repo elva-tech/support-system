@@ -21,6 +21,11 @@ const syncMerchantValidation = [
     .trim()
     .notEmpty()
     .withMessage("Application code is required"),
+  body("tenantSlug")
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 63 })
+    .withMessage("Valid tenantSlug is required when provided"),
   body("externalUserId").trim().notEmpty().withMessage("External user id is required"),
   body("merchantName").trim().notEmpty().withMessage("Merchant name is required"),
   body("email").isEmail().withMessage("Valid email is required").normalizeEmail(),

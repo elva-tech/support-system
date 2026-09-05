@@ -152,7 +152,9 @@ describe("Phase 13 production readiness (integration)", () => {
       "NOTIFICATION_FALLBACK_ENABLED",
       "TENANT_HEADER_OVERRIDE_ENABLED",
       "TENANT_DEV_DEFAULT_SLUG",
-      "EXPOSE_OTP_IN_RESPONSE"
+      "TENANT_REJECT_HEADER_IN_PRODUCTION",
+      "EXPOSE_OTP_IN_RESPONSE",
+      "LOG_OTP_TO_CONSOLE"
     ];
     const snapshot = {};
     for (const key of keys) {
@@ -174,13 +176,15 @@ describe("Phase 13 production readiness (integration)", () => {
     delete process.env.RESEND_API_KEY;
     process.env.NOTIFICATION_FALLBACK_ENABLED = "false";
     process.env.EXPOSE_OTP_IN_RESPONSE = "false";
+    process.env.LOG_OTP_TO_CONSOLE = "false";
+    process.env.TENANT_REJECT_HEADER_IN_PRODUCTION = "true";
     process.env.TENANT_HEADER_OVERRIDE_ENABLED = "true";
     delete process.env.TENANT_DEV_DEFAULT_SLUG;
 
     try {
       expect(() => validateEnvironment()).toThrow(/TENANT_HEADER_OVERRIDE_ENABLED/);
     } finally {
-      for (const key of [...keys, "EXPOSE_OTP_IN_RESPONSE"]) {
+      for (const key of keys) {
         if (snapshot[key] === undefined) {
           delete process.env[key];
         } else {

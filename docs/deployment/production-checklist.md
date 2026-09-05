@@ -27,7 +27,9 @@ Copy this checklist for each production cutover.
 - [ ] Backup taken
 - [ ] `npm run migrate:status`
 - [ ] `npm run migrate:up` (intentional — not automatic)
-- [ ] Confirm Phase 13/14 need **no** new migration (Phase 14: none)
+- [ ] Confirm Phase 13/14 need **no** new migration; Phase 15 has **one additive OTP index** migration
+- [ ] See [migration-verification.md](../migration-verification.md)
+- [ ] Final launch checklist: [launch-readiness-checklist.md](../launch-readiness-checklist.md)
 
 ## Platform Admin Bootstrap
 - [ ] `npm run ensure:platform-admin` only when creating/rotating platform admin

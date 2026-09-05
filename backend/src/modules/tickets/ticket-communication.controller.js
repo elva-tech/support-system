@@ -34,7 +34,9 @@ const updateStatus = asyncHandler(async (req, res) => {
 });
 
 const transfer = asyncHandler(async (req, res) => {
-  const ticket = await conversationService.transferTicket(req.params.id, req.body.teamId, req.user);
+  const ticket = await conversationService.transferTicket(req.params.id, req.body.teamId, req.user, {
+    tenantId: req.tenant._id
+  });
   res.json({ message: "Ticket transferred", data: ticket });
 });
 
