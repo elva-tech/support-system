@@ -250,7 +250,7 @@ const renderTenantAdminInvitationEmail = ({
         <strong>Workspace:</strong> <a href="${escapeHtml(workspaceUrl)}" style="color:#4a6789;">${escapeHtml(workspaceUrl)}</a>
       `)}
       ${renderParagraph("To activate your administrator account and set your password, use the secure link below:")}
-      ${renderCtaButton("Set up your account", invitationUrl)}
+      ${renderCtaButton("Set up your account", invitationUrl, branding?.primaryColor)}
       ${renderParagraph(`<span style="font-size:14px;color:${MUTED};">This invitation expires in <strong>${escapeHtml(String(expiryHours))} hours</strong>.</span>`)}
       ${renderParagraph(`<span style="font-size:14px;color:${MUTED};">If you did not expect this invitation, please contact <a href="mailto:${escapeHtml(supportEmail || "support@elvatech.in")}" style="color:#4a6789;">${escapeHtml(supportEmail || "support@elvatech.in")}</a>.</span>`)}
     `
@@ -273,11 +273,11 @@ const renderStaffInvitationEmail = ({
   branding
 }) => {
   const roleLabel = ROLE_LABELS[role] || role || "team member";
-  const orgName = tenantName || branding?.tenantName || "your organization";
+  const orgName = tenantName || branding?.tenantName || branding?.organizationName || "your organization";
 
   return renderEmailLayout({
     heroTitle: `Welcome to ${orgName} Support Portal`,
-    heroSubtitle: branding?.productName || "Support workspace invitation",
+    heroSubtitle: branding?.supportDisplayName || branding?.productName || "Support workspace invitation",
     preheader: `You have been invited to join ${orgName}`,
     branding,
     bodyHtml: `
@@ -289,9 +289,9 @@ const renderStaffInvitationEmail = ({
         <strong>Organization:</strong> ${escapeHtml(orgName)}<br/>
         <strong>Workspace:</strong> <a href="${escapeHtml(workspaceUrl)}" style="color:#4a6789;">${escapeHtml(workspaceUrl)}</a><br/>
         <strong>Role:</strong> ${escapeHtml(roleLabel)}
-      `)}
+      `, branding?.primaryColor)}
       ${renderParagraph("Complete your account setup using the secure link below. You will choose your own password — no one else knows it.")}
-      ${renderCtaButton("Complete account setup", invitationUrl)}
+      ${renderCtaButton("Complete account setup", invitationUrl, branding?.primaryColor)}
       ${renderParagraph(`<span style="font-size:14px;color:${MUTED};">This invitation expires in <strong>${escapeHtml(String(expiryHours))} hours</strong>.</span>`)}
       ${renderParagraph(`<span style="font-size:14px;color:${MUTED};">If you did not expect this invitation, you can ignore this email or contact <a href="mailto:${escapeHtml(supportEmail || "support@elvatech.in")}" style="color:#4a6789;">${escapeHtml(supportEmail || "support@elvatech.in")}</a>.</span>`)}
     `

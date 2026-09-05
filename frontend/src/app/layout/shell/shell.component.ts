@@ -1,8 +1,9 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, computed } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../core/services/auth.service';
 import { BrandingService } from '../../core/portal/branding.service';
+import { CustomerTerminologyService } from '../../core/portal/customer-terminology.service';
 import { UserRole } from '../../core/models';
 import { ElvaFooterComponent } from '../../shared/components/elva-footer/elva-footer.component';
 import { ElvaHeaderComponent } from '../../shared/components/elva-header/elva-header.component';
@@ -12,6 +13,7 @@ interface NavItem {
   path: string;
   roles?: UserRole[];
   adminOnly?: boolean;
+  clientsNav?: boolean;
 }
 
 @Component({
@@ -40,11 +42,11 @@ interface NavItem {
       <div class="flex flex-1 flex-col lg:flex-row">
         <aside class="border-b border-slate-200 bg-white lg:w-64 lg:border-b-0 lg:border-r">
           <nav class="flex gap-1 overflow-x-auto px-3 py-3 lg:flex-col lg:px-3 lg:py-4">
-            @for (item of visibleNav; track item.path) {
+            @for (item of visibleNav(); track item.path) {
               <a
                 [routerLink]="item.path"
-                routerLinkActive="bg-elva-brand text-white"
-                class="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-elva-50 hover:text-elva-brand lg:block"
+                routerLinkActive="nav-active"
+                class="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-[var(--tenant-primary-light)] hover:text-[var(--tenant-primary-color)] lg:block"
               >
                 {{ item.label }}
               </a>
@@ -70,6 +72,7 @@ interface NavItem {
 export class ShellComponent implements OnInit {
   private readonly auth = inject(AuthService);
   readonly branding = inject(BrandingService);
+  private readonly terms = inject(CustomerTerminologyService);
 
   readonly user = this.auth.currentUser;
 
@@ -81,7 +84,7 @@ export class ShellComponent implements OnInit {
     return this.branding.branding().displayName || 'Staff Portal';
   }
 
-  private readonly navItems: NavItem[] = [
+  private readonly baseNav: NavItem[] = [
     { label: 'Dashboard', path: '/dashboard' },
     { label: 'Ticket Queue', path: '/tickets' },
     { label: 'My Tickets', path: '/my-tickets' },
@@ -90,20 +93,22 @@ export class ShellComponent implements OnInit {
     { label: 'Applications', path: '/applications', adminOnly: true },
     { label: 'Modules', path: '/modules', adminOnly: true },
     { label: 'Teams', path: '/teams', adminOnly: true },
-    { label: 'Clients', path: '/merchants', adminOnly: true },
+    { label: 'Clients', path: '/merchants', adminOnly: true, clientsNav: true },
     { label: 'Inbound Mail', path: '/inbound-mail', adminOnly: true },
     { label: 'Users', path: '/users', adminOnly: true },
     { label: 'Audit Log', path: '/audit', adminOnly: true },
     { label: 'Settings', path: '/settings', adminOnly: true }
   ];
 
-  get visibleNav(): NavItem[] {
-    return this.navItems.filter((item) => {
-      if (item.adminOnly && !this.auth.isAdmin()) return false;
-      if (item.roles && !this.auth.hasRole(...item.roles)) return false;
-      return true;
-    });
-  }
+  readonly visibleNav = computed(() =>
+    this.baseNav
+      .filter((item) => {
+        if (item.adminOnly && !this.auth.isAdmin()) return false;
+        if (item.roles && !this.auth.hasRole(...item.roles)) return false;
+        return true;
+      })
+      .map((item) => (item.clientsNav ? { ...item, label: this.terms.plural() } : item))
+  );
 
   logout(): void {
     this.auth.logout();

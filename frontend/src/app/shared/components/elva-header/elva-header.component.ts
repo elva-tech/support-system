@@ -6,7 +6,10 @@ import { RouterLink } from '@angular/router';
   standalone: true,
   imports: [RouterLink],
   template: `
-    <header class="w-full border-b border-white/10 bg-elva-brand px-4 py-3 sm:px-6">
+    <header
+      class="w-full border-b border-white/10 px-4 py-3 sm:px-6"
+      [style.background-color]="'var(--tenant-primary-color)'"
+    >
       <div class="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 sm:gap-4">
         <a routerLink="/" class="inline-flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
           <img

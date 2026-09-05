@@ -50,27 +50,44 @@ export interface WorkspaceOrganization {
 export interface WorkspaceBrandingSettings {
   supportDisplayName?: string;
   primaryColor?: string | null;
+  secondaryColor?: string | null;
+  loginTitle?: string;
+  loginSubtitle?: string;
+  faviconUrl?: string | null;
   logoFileId?: string | null;
   logoFileName?: string | null;
   logoMimeType?: string | null;
   logoUrl?: string | null;
 }
 
+export interface WorkspaceSupportSettings {
+  customerLabel?: 'CLIENT' | 'CUSTOMER' | 'MERCHANT';
+  supportEmailDisplayName?: string;
+}
+
 export interface WorkspaceSettings {
   tenant: { id: string; name: string; slug: string; status: string };
   organization: WorkspaceOrganization;
   branding: WorkspaceBrandingSettings;
+  support?: WorkspaceSupportSettings;
   notifications: Record<string, unknown>;
   setup: WorkspaceSetup;
   emailBranding?: { supportDisplayName: string; tenantName: string };
 }
 
 export interface PublicWorkspaceBranding {
+  organizationName?: string;
+  supportDisplayName: string;
+  primaryColor: string | null;
+  secondaryColor?: string | null;
+  loginTitle?: string;
+  loginSubtitle?: string;
+  customerLabel?: 'CLIENT' | 'CUSTOMER' | 'MERCHANT';
+  logoAvailable?: boolean;
+  /** Phase 9 compatibility */
   tenantName: string;
   tenantSlug: string;
   displayName: string;
-  supportDisplayName: string;
-  primaryColor: string | null;
   logoUrl: string | null;
   hasLogo: boolean;
 }
@@ -102,9 +119,21 @@ export class WorkspaceApiService {
   updateBranding(payload: {
     supportDisplayName?: string;
     primaryColor?: string | null;
+    secondaryColor?: string | null;
+    loginTitle?: string;
+    loginSubtitle?: string;
   }): Observable<ApiResponse<{ branding: WorkspaceBrandingSettings; setup: WorkspaceSetup }>> {
     return this.http.patch<ApiResponse<{ branding: WorkspaceBrandingSettings; setup: WorkspaceSetup }>>(
       `${this.base}/branding`,
+      payload
+    );
+  }
+
+  updateSupport(payload: WorkspaceSupportSettings & { supportDisplayName?: string }): Observable<
+    ApiResponse<{ support: WorkspaceSupportSettings; branding: WorkspaceBrandingSettings }>
+  > {
+    return this.http.patch<ApiResponse<{ support: WorkspaceSupportSettings; branding: WorkspaceBrandingSettings }>>(
+      `${this.base}/support`,
       payload
     );
   }

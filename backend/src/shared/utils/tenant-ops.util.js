@@ -56,9 +56,16 @@ const isTenantOperable = (tenant) => {
  * Branding context for outbound email templates.
  * Physical mailbox stays central; display name may reflect the tenant.
  * Prefers tenant.settings.branding.supportDisplayName when configured.
+ * Never throws — missing branding falls back to ELVA defaults.
  */
 const buildEmailBranding = (tenant = null) => {
-  const tenantName = tenant?.name || "ELVA Technologies";
+  const {
+    ELVA_DEFAULT_BRANDING,
+    normalizeHexColor
+  } = require("../constants/default-branding");
+  const { buildWorkspaceUrl } = require("../../modules/tenant-provisioning/invitation-token.util");
+
+  const tenantName = tenant?.name || ELVA_DEFAULT_BRANDING.organizationName;
   const brandingSettings =
     tenant?.settings?.branding && typeof tenant.settings.branding === "object"
       ? tenant.settings.branding
@@ -72,21 +79,49 @@ const buildEmailBranding = (tenant = null) => {
   let supportDisplayName = configuredDisplay;
   if (!supportDisplayName) {
     supportDisplayName =
-      tenant?.slug && tenant.slug !== "elva" ? `${tenantName} Support` : "ELVA Support";
+      tenant?.slug && tenant.slug !== "elva"
+        ? `${tenantName} Support`
+        : ELVA_DEFAULT_BRANDING.supportDisplayName;
   }
+
+  const primaryColor =
+    normalizeHexColor(brandingSettings.primaryColor) || ELVA_DEFAULT_BRANDING.primaryColor;
+  const secondaryColor =
+    normalizeHexColor(brandingSettings.secondaryColor) || ELVA_DEFAULT_BRANDING.secondaryColor;
+
+  const logoFileId = brandingSettings.logoFileId || null;
+  let logoUrl = null;
+  if (logoFileId && tenant?.slug) {
+    try {
+      logoUrl = `${buildWorkspaceUrl(tenant.slug)}/api/workspace/branding/logo`;
+    } catch {
+      logoUrl = null;
+    }
+  }
+
+  const organizationName =
+    (tenant?.settings?.organization &&
+      (tenant.settings.organization.displayName || tenant.settings.organization.name)) ||
+    tenantName;
 
   return {
     tenantId: tenant?._id || null,
     tenantSlug: tenant?.slug || "elva",
     tenantName,
+    organizationName,
     supportDisplayName,
-    logoFileId: brandingSettings.logoFileId || null,
-    primaryColor: brandingSettings.primaryColor || null,
+    logoFileId,
+    logoUrl,
+    primaryColor,
+    secondaryColor,
     branding: {
       supportDisplayName,
       tenantName,
-      logoFileId: brandingSettings.logoFileId || null,
-      primaryColor: brandingSettings.primaryColor || null
+      organizationName,
+      logoFileId,
+      logoUrl,
+      primaryColor,
+      secondaryColor
     }
   };
 };

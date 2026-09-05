@@ -13,6 +13,16 @@ export interface InvitationValidation {
   adminEmail?: string;
   role?: string;
   expiresAt?: string;
+  branding?: {
+    organizationName?: string;
+    supportDisplayName?: string;
+    primaryColor?: string | null;
+    secondaryColor?: string | null;
+    loginTitle?: string;
+    loginSubtitle?: string;
+    customerLabel?: 'CLIENT' | 'CUSTOMER' | 'MERCHANT';
+    logoAvailable?: boolean;
+  };
 }
 
 export interface CompleteSetupRequest {

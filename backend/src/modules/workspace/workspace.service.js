@@ -11,11 +11,16 @@ const {
   WORKSPACE_SETUP_STATUSES,
   REQUIRED_SETUP_STEPS,
   ALL_SETUP_STEPS,
-  PRIMARY_COLOR_PATTERN,
   LOGO_ALLOWED_MIME_TYPES,
   LOGO_MAX_BYTES,
   defaultWorkspaceSetup
 } = require("../../shared/constants/workspace-setup");
+const { normalizeHexColor } = require("../../shared/constants/default-branding");
+const {
+  DEFAULT_CUSTOMER_LABEL,
+  normalizeCustomerLabel,
+  isValidCustomerLabel
+} = require("../../shared/constants/customer-labels");
 const {
   buildEmailBranding,
   buildBrandingStorageFolder
@@ -58,7 +63,14 @@ const ORGANIZATION_FIELDS = [
   "address"
 ];
 
-const BRANDING_PATCH_FIELDS = ["supportDisplayName", "primaryColor"];
+const BRANDING_PATCH_FIELDS = [
+  "supportDisplayName",
+  "primaryColor",
+  "secondaryColor",
+  "loginTitle",
+  "loginSubtitle",
+  "faviconUrl"
+];
 
 const toPlainSettings = (tenant) => {
   const settings = tenant.settings?.toObject
@@ -67,8 +79,38 @@ const toPlainSettings = (tenant) => {
   return {
     organization: { ...(settings.organization || {}) },
     branding: { ...(settings.branding || {}) },
+    support: { ...(settings.support || {}) },
     notifications: { ...(settings.notifications || {}) }
   };
+};
+
+const brandingResponse = (branding = {}) => ({
+  supportDisplayName: branding.supportDisplayName || "",
+  primaryColor: branding.primaryColor || null,
+  secondaryColor: branding.secondaryColor || null,
+  loginTitle: branding.loginTitle || "",
+  loginSubtitle: branding.loginSubtitle || "",
+  faviconUrl: branding.faviconUrl || null,
+  logoFileId: branding.logoFileId || null,
+  logoFileName: branding.logoFileName || null,
+  logoMimeType: branding.logoMimeType || null,
+  logoUrl: branding.logoFileId ? "/api/workspace/branding/logo" : null
+});
+
+const supportResponse = (support = {}) => ({
+  customerLabel: normalizeCustomerLabel(support.customerLabel),
+  supportEmailDisplayName: support.supportEmailDisplayName || ""
+});
+
+const parseOptionalHex = (value, fieldName) => {
+  if (value === null || value === "") {
+    return null;
+  }
+  const normalized = normalizeHexColor(value);
+  if (!normalized) {
+    throw new ApiError(400, `${fieldName} must be a hex color (#RGB or #RRGGBB)`);
+  }
+  return normalized;
 };
 
 const toPlainSetup = (tenant) => {
@@ -221,17 +263,34 @@ const getTenantOrThrow = async (tenantId) => {
   return tenant;
 };
 
+/**
+ * Safe public branding — no secrets, no tenant ObjectIds, no admin data.
+ * Hostname/context already established the tenant; slug is not an enumeration vector here.
+ */
 const publicBrandingPayload = (tenant) => {
   const settings = toPlainSettings(tenant);
   const emailBranding = buildEmailBranding(tenant);
   const hasLogo = Boolean(settings.branding.logoFileId);
+  const organizationName = settings.organization.displayName || tenant.name;
+  const customerLabel = normalizeCustomerLabel(settings.support.customerLabel);
+  const primaryColor =
+    normalizeHexColor(settings.branding.primaryColor) || null;
+  const secondaryColor =
+    normalizeHexColor(settings.branding.secondaryColor) || null;
 
   return {
+    organizationName,
+    supportDisplayName: emailBranding.supportDisplayName,
+    primaryColor,
+    secondaryColor,
+    loginTitle: settings.branding.loginTitle || "",
+    loginSubtitle: settings.branding.loginSubtitle || "",
+    customerLabel,
+    logoAvailable: hasLogo,
+    // Phase 9 compatibility aliases
     tenantName: tenant.name,
     tenantSlug: tenant.slug,
-    displayName: settings.organization.displayName || tenant.name,
-    supportDisplayName: emailBranding.supportDisplayName,
-    primaryColor: settings.branding.primaryColor || null,
+    displayName: organizationName,
     logoUrl: hasLogo ? "/api/workspace/branding/logo" : null,
     hasLogo
   };
@@ -250,14 +309,8 @@ const getSettings = async (tenantId) => {
       status: tenant.status
     },
     organization: settings.organization,
-    branding: {
-      supportDisplayName: settings.branding.supportDisplayName || "",
-      primaryColor: settings.branding.primaryColor || null,
-      logoFileId: settings.branding.logoFileId || null,
-      logoFileName: settings.branding.logoFileName || null,
-      logoMimeType: settings.branding.logoMimeType || null,
-      logoUrl: settings.branding.logoFileId ? "/api/workspace/branding/logo" : null
-    },
+    branding: brandingResponse(settings.branding),
+    support: supportResponse(settings.support),
     notifications: settings.notifications,
     setup,
     emailBranding: buildEmailBranding(tenant)
@@ -320,19 +373,43 @@ const updateBranding = async (tenantId, payload = {}, { actor } = {}) => {
   const tenant = await getTenantOrThrow(tenantId);
   const settings = toPlainSettings(tenant);
   const next = { ...settings.branding };
+  const changed = {};
 
   if (payload.supportDisplayName !== undefined) {
     next.supportDisplayName = sanitizeString(payload.supportDisplayName, 120);
+    changed.supportDisplayName = true;
   }
 
   if (payload.primaryColor !== undefined) {
-    const color = payload.primaryColor === null || payload.primaryColor === ""
+    next.primaryColor = parseOptionalHex(payload.primaryColor, "primaryColor");
+    changed.primaryColor = next.primaryColor;
+  }
+
+  if (payload.secondaryColor !== undefined) {
+    next.secondaryColor = parseOptionalHex(payload.secondaryColor, "secondaryColor");
+    changed.secondaryColor = next.secondaryColor;
+  }
+
+  if (payload.loginTitle !== undefined) {
+    next.loginTitle = sanitizeString(payload.loginTitle, 160);
+    changed.loginTitle = true;
+  }
+
+  if (payload.loginSubtitle !== undefined) {
+    next.loginSubtitle = sanitizeString(payload.loginSubtitle, 300);
+    changed.loginSubtitle = true;
+  }
+
+  if (payload.faviconUrl !== undefined) {
+    // Future-ready: store only null or empty for now; reject non-empty arbitrary URLs
+    const favicon = payload.faviconUrl === null || payload.faviconUrl === ""
       ? null
-      : String(payload.primaryColor).trim();
-    if (color && !PRIMARY_COLOR_PATTERN.test(color)) {
-      throw new ApiError(400, "primaryColor must be a hex color (#RGB or #RRGGBB)");
+      : sanitizeString(payload.faviconUrl, 500);
+    if (favicon && !/^https?:\/\//i.test(favicon)) {
+      throw new ApiError(400, "faviconUrl must be an http(s) URL or empty");
     }
-    next.primaryColor = color;
+    next.faviconUrl = favicon;
+    changed.faviconUrl = Boolean(favicon);
   }
 
   settings.branding = next;
@@ -348,18 +425,72 @@ const updateBranding = async (tenantId, payload = {}, { actor } = {}) => {
   await tenant.save();
   const setup = await refreshAndSaveSetup(tenant);
 
-  await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_BRANDING_UPDATED, tenantId, actor);
+  await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_BRANDING_UPDATED, tenantId, actor, {
+    fields: Object.keys(changed)
+  });
 
   return {
-    branding: {
-      supportDisplayName: next.supportDisplayName || "",
-      primaryColor: next.primaryColor || null,
-      logoFileId: next.logoFileId || null,
-      logoFileName: next.logoFileName || null,
-      logoMimeType: next.logoMimeType || null,
-      logoUrl: next.logoFileId ? "/api/workspace/branding/logo" : null
-    },
+    branding: brandingResponse(next),
     setup
+  };
+};
+
+const updateSupportSettings = async (tenantId, payload = {}, { actor } = {}) => {
+  const tenant = await getTenantOrThrow(tenantId);
+  const settings = toPlainSettings(tenant);
+  const next = { ...settings.support };
+  const previousLabel = normalizeCustomerLabel(next.customerLabel);
+  let customerLabelChanged = false;
+
+  if (payload.customerLabel !== undefined) {
+    if (!isValidCustomerLabel(payload.customerLabel)) {
+      throw new ApiError(
+        400,
+        "customerLabel must be one of: CLIENT, CUSTOMER, MERCHANT"
+      );
+    }
+    next.customerLabel = normalizeCustomerLabel(payload.customerLabel);
+    customerLabelChanged = next.customerLabel !== previousLabel;
+  }
+
+  if (payload.supportEmailDisplayName !== undefined) {
+    next.supportEmailDisplayName = sanitizeString(payload.supportEmailDisplayName, 120);
+  }
+
+  // Optional sync: allow supportDisplayName via support PATCH without duplicating ownership —
+  // write through to branding when provided.
+  if (payload.supportDisplayName !== undefined) {
+    settings.branding = {
+      ...settings.branding,
+      supportDisplayName: sanitizeString(payload.supportDisplayName, 120)
+    };
+  }
+
+  settings.support = next;
+  tenant.settings = settings;
+  await tenant.save();
+
+  await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_SUPPORT_SETTINGS_UPDATED, tenantId, actor, {
+    customerLabel: next.customerLabel || DEFAULT_CUSTOMER_LABEL
+  });
+
+  if (customerLabelChanged) {
+    await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_CUSTOMER_LABEL_UPDATED, tenantId, actor, {
+      from: previousLabel,
+      to: next.customerLabel
+    });
+  }
+
+  if (payload.supportDisplayName !== undefined) {
+    await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_BRANDING_UPDATED, tenantId, actor, {
+      fields: ["supportDisplayName"],
+      via: "support"
+    });
+  }
+
+  return {
+    support: supportResponse(next),
+    branding: brandingResponse(settings.branding)
   };
 };
 
@@ -420,16 +551,12 @@ const uploadLogo = async (tenantId, file, { actor } = {}) => {
   await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_LOGO_UPLOADED, tenantId, actor, {
     logoFileName: settings.branding.logoFileName
   });
+  await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_LOGO_UPDATED, tenantId, actor, {
+    logoFileName: settings.branding.logoFileName
+  });
 
   return {
-    branding: {
-      supportDisplayName: settings.branding.supportDisplayName || "",
-      primaryColor: settings.branding.primaryColor || null,
-      logoFileId: settings.branding.logoFileId,
-      logoFileName: settings.branding.logoFileName,
-      logoMimeType: settings.branding.logoMimeType,
-      logoUrl: "/api/workspace/branding/logo"
-    },
+    branding: brandingResponse(settings.branding),
     setup
   };
 };
@@ -460,15 +587,9 @@ const deleteLogo = async (tenantId, { actor } = {}) => {
 
   const setup = await refreshAndSaveSetup(tenant);
   await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_LOGO_DELETED, tenantId, actor);
+  await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_LOGO_REMOVED, tenantId, actor);
   return {
-    branding: {
-      supportDisplayName: settings.branding.supportDisplayName || "",
-      primaryColor: settings.branding.primaryColor || null,
-      logoFileId: null,
-      logoFileName: null,
-      logoMimeType: null,
-      logoUrl: null
-    },
+    branding: brandingResponse(settings.branding),
     setup
   };
 };
@@ -517,8 +638,10 @@ module.exports = {
   getSettings,
   getSetupStatus,
   getPublicBranding,
+  publicBrandingPayload,
   updateOrganization,
   updateBranding,
+  updateSupportSettings,
   skipSetupStep,
   uploadLogo,
   deleteLogo,

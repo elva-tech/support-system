@@ -1,10 +1,12 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { WorkspaceApiService } from '../../core/services/workspace-api.service';
 import { BrandingService } from '../../core/portal/branding.service';
+import { CustomerTerminologyService } from '../../core/portal/customer-terminology.service';
+import { HEX_COLOR_PATTERN, CUSTOMER_LABEL_COPY, CustomerLabel } from '../../core/portal/default-branding';
 import { formatApiError } from '../../shared/utils/api-error.util';
 
 @Component({
@@ -16,8 +18,10 @@ import { formatApiError } from '../../shared/utils/api-error.util';
       <div>
         <h1 class="text-2xl font-bold text-slate-900">Workspace settings</h1>
         <p class="mt-1 text-sm text-slate-500">
-          Organization identity and branding for this support workspace.
-          <a routerLink="/setup" class="text-elva-600 hover:underline">Open setup checklist</a>
+          Organization identity, branding, and support preferences for this workspace.
+          <a routerLink="/setup" class="hover:underline" [style.color]="'var(--tenant-primary-color)'"
+            >Open setup checklist</a
+          >
         </p>
       </div>
 
@@ -32,7 +36,7 @@ import { formatApiError } from '../../shared/utils/api-error.util';
         <h2 class="text-lg font-semibold">Organization</h2>
         <p class="text-xs text-slate-500">Workspace slug cannot be changed here (platform-managed).</p>
         <div>
-          <label class="form-label">Display name</label>
+          <label class="form-label">Organization name</label>
           <input class="form-input" formControlName="displayName" />
         </div>
         <div>
@@ -84,11 +88,38 @@ import { formatApiError } from '../../shared/utils/api-error.util';
         <h2 class="text-lg font-semibold">Branding</h2>
         <div>
           <label class="form-label">Support display name</label>
-          <input class="form-input" formControlName="supportDisplayName" />
+          <input class="form-input" formControlName="supportDisplayName" placeholder="ABC Support" />
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="form-label">Primary color</label>
+            <div class="flex gap-2">
+              <input type="color" class="h-10 w-12 cursor-pointer rounded border border-slate-300" [value]="colorPickerPrimary()" (input)="onPrimaryPicker($event)" />
+              <input class="form-input" formControlName="primaryColor" placeholder="#13294b" />
+            </div>
+            @if (brandForm.controls.primaryColor.invalid && brandForm.controls.primaryColor.touched) {
+              <p class="mt-1 text-xs text-red-600">Use #RGB or #RRGGBB</p>
+            }
+          </div>
+          <div>
+            <label class="form-label">Secondary color</label>
+            <div class="flex gap-2">
+              <input type="color" class="h-10 w-12 cursor-pointer rounded border border-slate-300" [value]="colorPickerSecondary()" (input)="onSecondaryPicker($event)" />
+              <input class="form-input" formControlName="secondaryColor" placeholder="#4a6789" />
+            </div>
+          </div>
         </div>
         <div>
-          <label class="form-label">Primary color</label>
-          <input class="form-input" formControlName="primaryColor" placeholder="#1a73e8" />
+          <label class="form-label">Login page title</label>
+          <input class="form-input" formControlName="loginTitle" placeholder="Welcome to ABC Support" />
+        </div>
+        <div>
+          <label class="form-label">Login page subtitle</label>
+          <input
+            class="form-input"
+            formControlName="loginSubtitle"
+            placeholder="Manage and track your support requests in one place."
+          />
         </div>
         <div>
           <label class="form-label">Logo</label>
@@ -97,22 +128,60 @@ import { formatApiError } from '../../shared/utils/api-error.util';
             <img [src]="logoPreview()!" alt="Logo" class="mt-3 h-16 w-16 rounded object-cover" />
           }
         </div>
+        <div
+          class="rounded-lg border border-slate-200 p-4"
+          [style.border-left-color]="previewPrimary()"
+          [style.border-left-width]="'4px'"
+        >
+          <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Preview</p>
+          <p class="mt-1 text-sm font-medium" [style.color]="previewPrimary()">
+            {{ brandForm.controls.supportDisplayName.value || 'Support display name' }}
+          </p>
+          <p class="text-xs text-slate-500">
+            {{ brandForm.controls.loginTitle.value || 'Login title' }} —
+            {{ brandForm.controls.loginSubtitle.value || 'Login subtitle' }}
+          </p>
+        </div>
         <div class="flex flex-wrap gap-3">
-          <button type="submit" class="btn-primary" [disabled]="saving()">Save branding</button>
+          <button type="submit" class="btn-primary" [disabled]="brandForm.invalid || saving()">Save branding</button>
           @if (hasLogo()) {
             <button type="button" class="btn-secondary" (click)="removeLogo()" [disabled]="saving()">Remove logo</button>
           }
         </div>
       </form>
 
+      <form class="card space-y-4" [formGroup]="supportForm" (ngSubmit)="saveSupport()">
+        <h2 class="text-lg font-semibold">Support preferences</h2>
+        <p class="text-xs text-slate-500">
+          Customer terminology is a UI label only. It does not rename database models or APIs.
+        </p>
+        <div>
+          <label class="form-label">Customer terminology</label>
+          <select class="form-input" formControlName="customerLabel">
+            <option value="CLIENT">Client</option>
+            <option value="CUSTOMER">Customer</option>
+            <option value="MERCHANT">Merchant</option>
+          </select>
+        </div>
+        <div class="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          <p class="font-medium">{{ terminologyPreview().plural }}</p>
+          <p class="text-xs text-slate-500">{{ terminologyPreview().add }} · {{ terminologyPreview().details }}</p>
+        </div>
+        <button type="submit" class="btn-primary" [disabled]="saving()">Save support preferences</button>
+      </form>
+
       <div class="card">
         <h2 class="text-lg font-semibold">Configuration shortcuts</h2>
         <div class="mt-4 flex flex-wrap gap-3 text-sm">
-          <a routerLink="/teams" class="text-elva-600 hover:underline">Teams</a>
-          <a routerLink="/users" class="text-elva-600 hover:underline">Users</a>
-          <a routerLink="/applications" class="text-elva-600 hover:underline">Applications</a>
-          <a routerLink="/modules" class="text-elva-600 hover:underline">Modules</a>
-          <a routerLink="/merchants" class="text-elva-600 hover:underline">Clients</a>
+          <a routerLink="/teams" class="hover:underline" [style.color]="'var(--tenant-primary-color)'">Teams</a>
+          <a routerLink="/users" class="hover:underline" [style.color]="'var(--tenant-primary-color)'">Users</a>
+          <a routerLink="/applications" class="hover:underline" [style.color]="'var(--tenant-primary-color)'"
+            >Applications</a
+          >
+          <a routerLink="/modules" class="hover:underline" [style.color]="'var(--tenant-primary-color)'">Modules</a>
+          <a routerLink="/merchants" class="hover:underline" [style.color]="'var(--tenant-primary-color)'">{{
+            terms.plural()
+          }}</a>
         </div>
       </div>
     </div>
@@ -121,6 +190,7 @@ import { formatApiError } from '../../shared/utils/api-error.util';
 export class WorkspaceSettingsComponent implements OnInit {
   private readonly api = inject(WorkspaceApiService);
   private readonly brandingSvc = inject(BrandingService);
+  readonly terms = inject(CustomerTerminologyService);
   private readonly fb = inject(FormBuilder);
 
   readonly error = signal('');
@@ -145,8 +215,45 @@ export class WorkspaceSettingsComponent implements OnInit {
 
   readonly brandForm = this.fb.nonNullable.group({
     supportDisplayName: [''],
-    primaryColor: ['']
+    primaryColor: ['', Validators.pattern(/^$|^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/)],
+    secondaryColor: ['', Validators.pattern(/^$|^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/)],
+    loginTitle: [''],
+    loginSubtitle: ['']
   });
+
+  readonly supportForm = this.fb.nonNullable.group({
+    customerLabel: ['CLIENT' as CustomerLabel]
+  });
+
+  readonly terminologyPreview = computed(() => {
+    const label = (this.supportForm.controls.customerLabel.value || 'CLIENT') as CustomerLabel;
+    return CUSTOMER_LABEL_COPY[label] || CUSTOMER_LABEL_COPY.CLIENT;
+  });
+
+  colorPickerPrimary(): string {
+    const v = this.brandForm.controls.primaryColor.value;
+    return HEX_COLOR_PATTERN.test(v) && v.length === 7 ? v : '#13294b';
+  }
+
+  colorPickerSecondary(): string {
+    const v = this.brandForm.controls.secondaryColor.value;
+    return HEX_COLOR_PATTERN.test(v) && v.length === 7 ? v : '#4a6789';
+  }
+
+  previewPrimary(): string {
+    const v = this.brandForm.controls.primaryColor.value;
+    return HEX_COLOR_PATTERN.test(v) ? v : 'var(--tenant-primary-color)';
+  }
+
+  onPrimaryPicker(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.brandForm.controls.primaryColor.setValue(value);
+  }
+
+  onSecondaryPicker(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    this.brandForm.controls.secondaryColor.setValue(value);
+  }
 
   ngOnInit(): void {
     this.api.getSettings().subscribe({
@@ -166,7 +273,13 @@ export class WorkspaceSettingsComponent implements OnInit {
         });
         this.brandForm.patchValue({
           supportDisplayName: res.data.branding?.supportDisplayName || '',
-          primaryColor: res.data.branding?.primaryColor || ''
+          primaryColor: res.data.branding?.primaryColor || '',
+          secondaryColor: res.data.branding?.secondaryColor || '',
+          loginTitle: res.data.branding?.loginTitle || '',
+          loginSubtitle: res.data.branding?.loginSubtitle || ''
+        });
+        this.supportForm.patchValue({
+          customerLabel: (res.data.support?.customerLabel || 'CLIENT') as CustomerLabel
         });
         this.hasLogo.set(Boolean(res.data.branding?.logoFileId));
         if (res.data.branding?.logoFileId) {
@@ -207,7 +320,10 @@ export class WorkspaceSettingsComponent implements OnInit {
     this.api
       .updateBranding({
         supportDisplayName: raw.supportDisplayName,
-        primaryColor: raw.primaryColor || null
+        primaryColor: raw.primaryColor || null,
+        secondaryColor: raw.secondaryColor || null,
+        loginTitle: raw.loginTitle,
+        loginSubtitle: raw.loginSubtitle
       })
       .subscribe({
         next: () => {
@@ -235,6 +351,22 @@ export class WorkspaceSettingsComponent implements OnInit {
           this.saving.set(false);
         }
       });
+  }
+
+  saveSupport(): void {
+    this.saving.set(true);
+    this.error.set('');
+    this.api.updateSupport(this.supportForm.getRawValue()).subscribe({
+      next: () => {
+        this.success.set('Support preferences updated');
+        this.saving.set(false);
+        this.brandingSvc.refreshTenantBranding();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.error.set(formatApiError(err));
+        this.saving.set(false);
+      }
+    });
   }
 
   removeLogo(): void {

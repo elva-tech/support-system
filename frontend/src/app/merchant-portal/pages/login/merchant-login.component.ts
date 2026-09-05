@@ -8,6 +8,8 @@ import { MerchantFlowService } from '../../services/merchant-flow.service';
 import { formatApiError } from '../../../shared/utils/api-error.util';
 import { ElvaFooterComponent } from '../../../shared/components/elva-footer/elva-footer.component';
 import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva-header.component';
+import { BrandingService } from '../../../core/portal/branding.service';
+import { CustomerTerminologyService } from '../../../core/portal/customer-terminology.service';
 
 @Component({
   selector: 'app-merchant-login',
@@ -15,7 +17,14 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
   imports: [CommonModule, ReactiveFormsModule, RouterLink, ElvaHeaderComponent, ElvaFooterComponent],
   template: `
     <div class="flex min-h-screen flex-col bg-gradient-to-br from-elva-950 via-elva-900 to-elva-brand">
-      <app-elva-header align="center" subtitle="Merchant Sign In" [showTitle]="true" />
+      <app-elva-header
+        align="center"
+        [subtitle]="(terms.singular() + ' Sign In')"
+        [productName]="branding.branding().productName"
+        [tagline]="branding.branding().supportDisplayName"
+        [logoUrl]="branding.branding().logoUrl || '/images/elva-logo.png'"
+        [showTitle]="true"
+      />
 
       <main class="flex flex-1 items-center justify-center px-4 py-8">
         <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
@@ -53,10 +62,10 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
           </form>
 
           <p class="mt-6 text-center text-xs text-slate-400">
-            <a routerLink="/" class="text-elva-brand hover:underline">Back to home</a>
+            <a routerLink="/" class="hover:underline" [style.color]="'var(--tenant-primary-color)'">Back to home</a>
             <span class="mx-2">·</span>
             Staff member?
-            <a routerLink="/auth/login" class="text-elva-brand hover:underline">Admin portal</a>
+            <a routerLink="/auth/login" class="hover:underline" [style.color]="'var(--tenant-primary-color)'">Admin portal</a>
           </p>
         </div>
       </main>
@@ -71,6 +80,8 @@ export class MerchantLoginComponent implements OnInit {
   private readonly flow = inject(MerchantFlowService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  readonly branding = inject(BrandingService);
+  readonly terms = inject(CustomerTerminologyService);
 
   readonly loading = signal(false);
   readonly error = signal('');
@@ -81,6 +92,7 @@ export class MerchantLoginComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.branding.loadTenantBranding();
     const email = this.route.snapshot.queryParamMap.get('email');
     if (email) {
       this.form.patchValue({ email });

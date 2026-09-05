@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { PlatformAuthService } from '../../../core/services/platform-auth.service';
@@ -15,6 +15,8 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
       <app-elva-header
         [subtitle]="branding.branding().displayName"
         [tagline]="branding.branding().productName"
+        [productName]="branding.branding().supportDisplayName"
+        [logoUrl]="branding.branding().logoUrl || '/images/elva-logo.png'"
         [showActionsOnMobile]="true"
         [compactActions]="true"
       >
@@ -33,8 +35,8 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
             @for (item of visibleNav; track item.path) {
               <a
                 [routerLink]="item.path"
-                routerLinkActive="bg-elva-brand text-white"
-                class="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-elva-50 hover:text-elva-brand lg:block"
+                routerLinkActive="nav-active"
+                class="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-[var(--tenant-primary-light)] hover:text-[var(--tenant-primary-color)] lg:block"
               >
                 {{ item.label }}
               </a>
@@ -58,10 +60,14 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
     </div>
   `
 })
-export class PlatformShellComponent {
+export class PlatformShellComponent implements OnInit {
   readonly auth = inject(PlatformAuthService);
   readonly branding = inject(BrandingService);
   readonly admin = this.auth.currentAdmin;
+
+  ngOnInit(): void {
+    this.branding.applyPlatformDefaults();
+  }
 
   readonly navItems: {
     label: string;
@@ -103,6 +109,7 @@ export class PlatformShellComponent {
 
   logout(): void {
     this.auth.logout();
+    this.branding.applyPlatformDefaults();
     window.location.href = '/login';
   }
 }

@@ -30,6 +30,11 @@ const tenantSettingsSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {}
     },
+    /** Phase 12 — support identity / customer terminology (presentation only) */
+    support: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {}
+    },
     notifications: {
       type: mongoose.Schema.Types.Mixed,
       default: {}
@@ -113,6 +118,7 @@ const tenantSchema = new mongoose.Schema(
       default: () => ({
         organization: {},
         branding: {},
+        support: {},
         notifications: {}
       })
     },

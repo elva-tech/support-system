@@ -28,6 +28,11 @@ const updateBranding = asyncHandler(async (req, res) => {
   res.json({ message: "Branding updated", data });
 });
 
+const updateSupport = asyncHandler(async (req, res) => {
+  const data = await workspaceService.updateSupportSettings(req.tenant._id, req.body, actorCtx(req));
+  res.json({ message: "Support settings updated", data });
+});
+
 const skipStep = asyncHandler(async (req, res) => {
   const data = await workspaceService.skipSetupStep(req.tenant._id, req.params.step, actorCtx(req));
   res.json({ message: "Setup step skipped", data });
@@ -57,6 +62,7 @@ module.exports = {
   getPublicBranding,
   updateOrganization,
   updateBranding,
+  updateSupport,
   skipStep,
   uploadLogo,
   deleteLogo,

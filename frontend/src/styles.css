@@ -2,13 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --tenant-primary-color: #13294b;
+  --tenant-secondary-color: #4a6789;
+  --tenant-primary-hover: #0f2139;
+  --tenant-primary-light: #e8eef5;
+}
+
 @layer components {
   .btn-primary {
-    @apply inline-flex items-center justify-center rounded-lg bg-elva-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-elva-800 focus:outline-none focus:ring-2 focus:ring-elva-700 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+    background-color: var(--tenant-primary-color);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--tenant-primary-hover);
+  }
+
+  .btn-primary:focus {
+    --tw-ring-color: var(--tenant-primary-color);
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-elva-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+    @apply inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-secondary:focus {
+    --tw-ring-color: var(--tenant-primary-color);
   }
 
   .btn-danger {
@@ -16,7 +36,12 @@
   }
 
   .form-input {
-    @apply block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-elva-500 focus:outline-none focus:ring-1 focus:ring-elva-500;
+    @apply block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1;
+  }
+
+  .form-input:focus {
+    border-color: var(--tenant-primary-color);
+    --tw-ring-color: var(--tenant-primary-color);
   }
 
   .form-label {
@@ -29,5 +54,10 @@
 
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .nav-active {
+    background-color: var(--tenant-primary-color);
+    color: #ffffff;
   }
 }

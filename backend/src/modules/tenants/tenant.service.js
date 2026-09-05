@@ -19,6 +19,7 @@ const {
 const defaultSettings = () => ({
   organization: {},
   branding: {},
+  support: {},
   notifications: {}
 });
 

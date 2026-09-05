@@ -6,6 +6,7 @@ import { AuthApiService } from '../../../core/services/auth-api.service';
 import { AuthService } from '../../../core/services/auth.service';
 import { WorkspaceApiService } from '../../../core/services/workspace-api.service';
 import { BrandingService } from '../../../core/portal/branding.service';
+import { CustomerTerminologyService } from '../../../core/portal/customer-terminology.service';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ElvaFooterComponent } from '../../../shared/components/elva-footer/elva-footer.component';
 import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva-header.component';
@@ -27,9 +28,14 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
       <main class="flex flex-1 items-center justify-center px-4 py-8">
         <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
           <div class="mb-6 text-center sm:mb-8">
-            <h1 class="text-xl font-bold text-slate-900 sm:text-2xl">Staff Sign In</h1>
+            <h1 class="text-xl font-bold text-slate-900 sm:text-2xl">
+              {{ branding.branding().loginTitle || 'Staff Sign In' }}
+            </h1>
             <p class="mt-2 text-sm text-slate-500">
-              Sign in to this workspace with your admin, team lead, or agent credentials
+              {{
+                branding.branding().loginSubtitle ||
+                  'Sign in to this workspace with your admin, team lead, or agent credentials'
+              }}
             </p>
           </div>
 
@@ -66,10 +72,12 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
           </form>
 
           <p class="mt-6 text-center text-xs text-slate-400">
-            <a routerLink="/" class="text-elva-brand hover:underline">Back to home</a>
+            <a routerLink="/" class="hover:underline" [style.color]="'var(--tenant-primary-color)'">Back to home</a>
             <span class="mx-2">·</span>
-            Customer?
-            <a routerLink="/merchant/login" class="text-elva-brand hover:underline">Client sign in</a>
+            {{ terms.singular() }}?
+            <a routerLink="/merchant/login" class="hover:underline" [style.color]="'var(--tenant-primary-color)'"
+              >{{ terms.singular() }} sign in</a
+            >
           </p>
         </div>
       </main>
@@ -84,6 +92,7 @@ export class LoginComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly workspaceApi = inject(WorkspaceApiService);
   readonly branding = inject(BrandingService);
+  readonly terms = inject(CustomerTerminologyService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 

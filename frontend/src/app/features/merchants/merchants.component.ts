@@ -6,6 +6,8 @@ import { MerchantAdminService } from '../../core/services/merchant-admin.service
 import { ApplicationService } from '../../core/services/application.service';
 import { Application, ApplicationRef, Merchant } from '../../core/models';
 import { StatusBadgeComponent } from '../../shared/components/status-badge/status-badge.component';
+import { CustomerTerminologyService } from '../../core/portal/customer-terminology.service';
+import { BrandingService } from '../../core/portal/branding.service';
 
 @Component({
   selector: 'app-merchants',
@@ -15,12 +17,12 @@ import { StatusBadgeComponent } from '../../shared/components/status-badge/statu
     <div class="space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 class="text-2xl font-bold text-slate-900">Clients</h2>
+          <h2 class="text-2xl font-bold text-slate-900">{{ terms.plural() }}</h2>
           <p class="text-sm text-slate-500">
-            Register client emails per application — they sign in with OTP at the customer portal
+            Register {{ terms.singular().toLowerCase() }} emails per application — they sign in with OTP at the customer portal
           </p>
         </div>
-        <button type="button" class="btn-primary" (click)="openCreate()">Add Merchant</button>
+        <button type="button" class="btn-primary" (click)="openCreate()">{{ terms.addLabel() }}</button>
       </div>
 
       @if (error()) {
@@ -54,7 +56,7 @@ import { StatusBadgeComponent } from '../../shared/components/status-badge/statu
                 <td class="px-4 py-3 text-slate-600">{{ merchant.phone || '—' }}</td>
                 <td class="px-4 py-3"><app-status-badge [active]="merchant.isActive" /></td>
                 <td class="px-4 py-3 text-right">
-                  <button type="button" class="text-elva-600 hover:underline" (click)="openEdit(merchant)">
+                  <button type="button" class="hover:underline" [style.color]="'var(--tenant-primary-color)'" (click)="openEdit(merchant)">
                     Edit
                   </button>
                 </td>
@@ -62,7 +64,7 @@ import { StatusBadgeComponent } from '../../shared/components/status-badge/statu
             } @empty {
               <tr>
                 <td colspan="6" class="px-4 py-8 text-center text-slate-500">
-                  No merchants registered yet. Add an email and application to enable OTP login.
+                  {{ terms.emptyLabel() }} Add an email and application to enable OTP login.
                 </td>
               </tr>
             }
@@ -74,7 +76,7 @@ import { StatusBadgeComponent } from '../../shared/components/status-badge/statu
     @if (showForm()) {
       <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
         <div class="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-          <h3 class="text-lg font-semibold">{{ editingId() ? 'Edit Merchant' : 'Register Merchant' }}</h3>
+          <h3 class="text-lg font-semibold">{{ editingId() ? 'Edit ' + terms.singular() : 'Register ' + terms.singular() }}</h3>
           <p class="mt-1 text-sm text-slate-500">
             A welcome email with portal access details will be sent to this address.
           </p>
@@ -120,6 +122,8 @@ export class MerchantsComponent implements OnInit {
   private readonly api = inject(MerchantAdminService);
   private readonly appApi = inject(ApplicationService);
   private readonly fb = inject(FormBuilder);
+  readonly terms = inject(CustomerTerminologyService);
+  private readonly branding = inject(BrandingService);
 
   readonly items = signal<Merchant[]>([]);
   readonly applications = signal<Application[]>([]);
@@ -138,6 +142,7 @@ export class MerchantsComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.branding.loadTenantBranding();
     this.appApi.list().subscribe({
       next: (res) => this.applications.set(res.data.filter((a) => a.isActive)),
       error: (err: HttpErrorResponse) => this.error.set(err.error?.message || 'Failed to load applications')
@@ -206,7 +211,7 @@ export class MerchantsComponent implements OnInit {
       next: () => {
         this.saving.set(false);
         this.closeForm();
-        this.successMessage.set(id ? 'Merchant updated.' : 'Merchant registered — OTP login is now enabled for this email.');
+        this.successMessage.set(id ? `${this.terms.singular()} updated.` : `${this.terms.singular()} registered — OTP login is now enabled for this email.`);
         setTimeout(() => this.successMessage.set(''), 5000);
         this.load();
       },

@@ -6,6 +6,7 @@ import {
   InvitationValidation,
   OnboardingApiService
 } from '../../core/services/onboarding-api.service';
+import { BrandingService } from '../../core/portal/branding.service';
 import { ElvaFooterComponent } from '../../shared/components/elva-footer/elva-footer.component';
 import { ElvaHeaderComponent } from '../../shared/components/elva-header/elva-header.component';
 import { formatApiError } from '../../shared/utils/api-error.util';
@@ -16,7 +17,13 @@ import { formatApiError } from '../../shared/utils/api-error.util';
   imports: [CommonModule, ReactiveFormsModule, RouterLink, ElvaHeaderComponent, ElvaFooterComponent],
   template: `
     <div class="flex min-h-screen flex-col bg-gradient-to-br from-elva-950 via-elva-900 to-elva-brand">
-      <app-elva-header align="center" subtitle="Account setup" tagline="Activate your workspace account" />
+      <app-elva-header
+        align="center"
+        [subtitle]="branding.branding().displayName || 'Account setup'"
+        [productName]="branding.branding().productName"
+        [tagline]="branding.branding().supportDisplayName || 'Activate your workspace account'"
+        [logoUrl]="branding.branding().logoUrl || '/images/elva-logo.png'"
+      />
 
       <main class="flex flex-1 items-center justify-center px-4 py-8">
         <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
@@ -108,6 +115,7 @@ import { formatApiError } from '../../shared/utils/api-error.util';
 export class SetupAccountComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(OnboardingApiService);
+  readonly branding = inject(BrandingService);
   private readonly fb = inject(FormBuilder);
 
   readonly loadingInvite = signal(true);
@@ -127,6 +135,7 @@ export class SetupAccountComponent implements OnInit {
     if (!this.token || this.token.length < 16) {
       this.invite.set({ valid: false });
       this.loadingInvite.set(false);
+      this.branding.applyPlatformDefaults();
       return;
     }
 
@@ -134,10 +143,23 @@ export class SetupAccountComponent implements OnInit {
       next: (res) => {
         this.invite.set(res.data);
         this.loadingInvite.set(false);
+        if (res.data?.valid && res.data.branding) {
+          this.branding.applyInvitationBranding(res.data.branding);
+        } else if (res.data?.valid) {
+          this.branding.applyInvitationBranding({
+            organizationName: res.data.tenantName,
+            supportDisplayName: res.data.tenantName
+              ? `${res.data.tenantName} Support`
+              : undefined
+          });
+        } else {
+          this.branding.applyPlatformDefaults();
+        }
       },
       error: () => {
         this.invite.set({ valid: false });
         this.loadingInvite.set(false);
+        this.branding.applyPlatformDefaults();
       }
     });
   }

@@ -715,6 +715,9 @@ const validateInvitationToken = async (rawToken) => {
     return { valid: false };
   }
 
+  const { publicBrandingPayload } = require("../workspace/workspace.service");
+  const branding = publicBrandingPayload(tenant);
+
   return {
     valid: true,
     invitationType: "TENANT_ADMIN",
@@ -723,7 +726,17 @@ const validateInvitationToken = async (rawToken) => {
     adminName: `${user.firstName} ${user.lastName}`.replace(/ -$/, "").trim(),
     adminEmail: user.email,
     role: user.role,
-    expiresAt: invitation.expiresAt
+    expiresAt: invitation.expiresAt,
+    branding: {
+      organizationName: branding.organizationName,
+      supportDisplayName: branding.supportDisplayName,
+      primaryColor: branding.primaryColor,
+      secondaryColor: branding.secondaryColor,
+      loginTitle: branding.loginTitle,
+      loginSubtitle: branding.loginSubtitle,
+      customerLabel: branding.customerLabel,
+      logoAvailable: branding.logoAvailable
+    }
   };
 };
 

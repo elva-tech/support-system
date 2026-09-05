@@ -3,6 +3,7 @@ const workspaceController = require("./workspace.controller");
 const {
   organizationValidation,
   brandingValidation,
+  supportValidation,
   skipStepValidation
 } = require("./workspace.validation");
 const validate = require("../../shared/middleware/validate.middleware");
@@ -50,6 +51,14 @@ router.patch(
   brandingValidation,
   validate,
   workspaceController.updateBranding
+);
+
+router.patch(
+  "/support",
+  authorize(ROLES.ADMIN),
+  supportValidation,
+  validate,
+  workspaceController.updateSupport
 );
 
 router.post(

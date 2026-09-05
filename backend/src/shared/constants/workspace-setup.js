@@ -38,8 +38,10 @@ const defaultWorkspaceSetup = () => ({
   }
 });
 
-/** Hex color #RGB or #RRGGBB */
-const PRIMARY_COLOR_PATTERN = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
+const { HEX_COLOR_PATTERN } = require("./default-branding");
+
+/** @deprecated Prefer HEX_COLOR_PATTERN from default-branding — kept for Phase 9 callers */
+const PRIMARY_COLOR_PATTERN = HEX_COLOR_PATTERN;
 
 const LOGO_ALLOWED_MIME_TYPES = Object.freeze([
   "image/png",
@@ -57,6 +59,7 @@ module.exports = {
   defaultSetupSteps,
   defaultWorkspaceSetup,
   PRIMARY_COLOR_PATTERN,
+  HEX_COLOR_PATTERN,
   LOGO_ALLOWED_MIME_TYPES,
   LOGO_MAX_BYTES
 };
