@@ -57,6 +57,7 @@ import { formatApiError } from '../../../shared/utils/api-error.util';
               <th class="px-4 py-3">Name</th>
               <th class="px-4 py-3">Slug</th>
               <th class="px-4 py-3">Status</th>
+              <th class="px-4 py-3">Workspace setup</th>
               <th class="px-4 py-3">Workspace</th>
               <th class="px-4 py-3">Created</th>
               @if (canManage()) {
@@ -71,6 +72,16 @@ import { formatApiError } from '../../../shared/utils/api-error.util';
                 <td class="px-4 py-3 text-slate-600">{{ t.slug }}</td>
                 <td class="px-4 py-3">
                   <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium">{{ t.status }}</span>
+                </td>
+                <td class="px-4 py-3 text-xs text-slate-600">
+                  @if (t.setup; as s) {
+                    {{ s.status }}
+                    @if (s.progress) {
+                      ({{ s.progress.completed }}/{{ s.progress.total }})
+                    }
+                  } @else {
+                    —
+                  }
                 </td>
                 <td class="px-4 py-3">
                   <a class="text-elva-brand hover:underline" [href]="workspaceUrl(t.slug)" target="_blank" rel="noopener">
@@ -107,7 +118,7 @@ import { formatApiError } from '../../../shared/utils/api-error.util';
               </tr>
             } @empty {
               <tr>
-                <td class="px-4 py-8 text-center text-slate-500" [attr.colspan]="canManage() ? 6 : 5">
+                <td class="px-4 py-8 text-center text-slate-500" [attr.colspan]="canManage() ? 7 : 6">
                   {{ loading() ? 'Loading…' : 'No businesses found.' }}
                 </td>
               </tr>

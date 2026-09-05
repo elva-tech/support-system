@@ -15,9 +15,9 @@ import { StatusBadgeComponent } from '../../shared/components/status-badge/statu
     <div class="space-y-6">
       <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 class="text-2xl font-bold text-slate-900">Merchants</h2>
+          <h2 class="text-2xl font-bold text-slate-900">Clients</h2>
           <p class="text-sm text-slate-500">
-            Register merchant emails per application — they sign in with OTP at the merchant portal
+            Register client emails per application — they sign in with OTP at the customer portal
           </p>
         </div>
         <button type="button" class="btn-primary" (click)="openCreate()">Add Merchant</button>

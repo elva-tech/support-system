@@ -3,6 +3,9 @@ import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthApiService } from '../../../core/services/auth-api.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { WorkspaceApiService } from '../../../core/services/workspace-api.service';
+import { BrandingService } from '../../../core/portal/branding.service';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ElvaFooterComponent } from '../../../shared/components/elva-footer/elva-footer.component';
 import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva-header.component';
@@ -13,7 +16,13 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
   imports: [CommonModule, ReactiveFormsModule, RouterLink, ElvaHeaderComponent, ElvaFooterComponent],
   template: `
     <div class="flex min-h-screen flex-col bg-gradient-to-br from-elva-950 via-elva-900 to-elva-brand">
-      <app-elva-header align="center" subtitle="Staff Portal" />
+      <app-elva-header
+        align="center"
+        [subtitle]="branding.branding().displayName || 'Staff Portal'"
+        [productName]="branding.branding().productName"
+        [tagline]="branding.branding().supportDisplayName"
+        [logoUrl]="branding.branding().logoUrl || '/images/elva-logo.png'"
+      />
 
       <main class="flex flex-1 items-center justify-center px-4 py-8">
         <div class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
@@ -60,7 +69,7 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
             <a routerLink="/" class="text-elva-brand hover:underline">Back to home</a>
             <span class="mx-2">·</span>
             Customer?
-            <a routerLink="/merchant/login" class="text-elva-brand hover:underline">Merchant sign in</a>
+            <a routerLink="/merchant/login" class="text-elva-brand hover:underline">Client sign in</a>
           </p>
         </div>
       </main>
@@ -72,6 +81,9 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
 export class LoginComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly authApi = inject(AuthApiService);
+  private readonly auth = inject(AuthService);
+  private readonly workspaceApi = inject(WorkspaceApiService);
+  readonly branding = inject(BrandingService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
@@ -85,6 +97,7 @@ export class LoginComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.branding.loadTenantBranding();
     const email = this.route.snapshot.queryParamMap.get('email');
     if (email) {
       this.form.patchValue({ email });
@@ -99,12 +112,34 @@ export class LoginComponent implements OnInit {
     this.error.set('');
 
     this.authApi.login(this.form.getRawValue()).subscribe({
-      next: () => this.router.navigate(['/dashboard']),
+      next: () => this.afterLoginNavigate(),
       error: (err: HttpErrorResponse) => {
         this.error.set(err.error?.message || 'Login failed. Please try again.');
         this.loading.set(false);
+      }
+    });
+  }
+
+  private afterLoginNavigate(): void {
+    if (!this.auth.isAdmin()) {
+      this.loading.set(false);
+      void this.router.navigate(['/dashboard']);
+      return;
+    }
+
+    this.workspaceApi.getSetupStatus().subscribe({
+      next: (res) => {
+        this.loading.set(false);
+        if (res.data.status !== 'COMPLETED') {
+          void this.router.navigate(['/setup']);
+        } else {
+          void this.router.navigate(['/dashboard']);
+        }
       },
-      complete: () => this.loading.set(false)
+      error: () => {
+        this.loading.set(false);
+        void this.router.navigate(['/dashboard']);
+      }
     });
   }
 }

@@ -1,9 +1,8 @@
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../core/services/auth.service';
 import { BrandingService } from '../../core/portal/branding.service';
-import { PortalContextService } from '../../core/portal/portal-context.service';
 import { UserRole } from '../../core/models';
 import { ElvaFooterComponent } from '../../shared/components/elva-footer/elva-footer.component';
 import { ElvaHeaderComponent } from '../../shared/components/elva-header/elva-header.component';
@@ -23,7 +22,9 @@ interface NavItem {
     <div class="flex min-h-screen flex-col bg-slate-50">
       <app-elva-header
         [subtitle]="headerSubtitle"
+        [productName]="branding.branding().productName"
         [tagline]="branding.branding().supportDisplayName"
+        [logoUrl]="branding.branding().logoUrl || '/images/elva-logo.png'"
         [showActionsOnMobile]="true"
         [compactActions]="true"
       >
@@ -66,16 +67,18 @@ interface NavItem {
     </div>
   `
 })
-export class ShellComponent {
+export class ShellComponent implements OnInit {
   private readonly auth = inject(AuthService);
   readonly branding = inject(BrandingService);
-  private readonly portal = inject(PortalContextService);
 
   readonly user = this.auth.currentUser;
 
+  ngOnInit(): void {
+    this.branding.loadTenantBranding();
+  }
+
   get headerSubtitle(): string {
-    const slug = this.portal.tenantSlug;
-    return slug ? `${slug} workspace` : 'Staff Portal';
+    return this.branding.branding().displayName || 'Staff Portal';
   }
 
   private readonly navItems: NavItem[] = [
@@ -87,9 +90,10 @@ export class ShellComponent {
     { label: 'Applications', path: '/applications', adminOnly: true },
     { label: 'Modules', path: '/modules', adminOnly: true },
     { label: 'Teams', path: '/teams', adminOnly: true },
-    { label: 'Merchants', path: '/merchants', adminOnly: true },
+    { label: 'Clients', path: '/merchants', adminOnly: true },
     { label: 'Inbound Mail', path: '/inbound-mail', adminOnly: true },
-    { label: 'Users', path: '/users', adminOnly: true }
+    { label: 'Users', path: '/users', adminOnly: true },
+    { label: 'Settings', path: '/settings', adminOnly: true }
   ];
 
   get visibleNav(): NavItem[] {
@@ -102,6 +106,7 @@ export class ShellComponent {
 
   logout(): void {
     this.auth.logout();
+    this.branding.clearOverride();
     window.location.href = '/';
   }
 }

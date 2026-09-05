@@ -189,11 +189,19 @@ const runProvisioningPipeline = async (provisioning, { actor, tenantPayload } = 
 
       settings.organization = {
         ...(settings.organization || {}),
-        name: settings.organization?.name || tenant.name
+        name: settings.organization?.name || tenant.name,
+        displayName: settings.organization?.displayName || tenant.name
       };
       settings.branding = settings.branding || {};
       settings.notifications = settings.notifications || {};
       tenant.settings = settings;
+
+      // Workspace setup starts NOT_STARTED (distinct from provisioning READY)
+      if (!tenant.setup || !tenant.setup.status) {
+        const { defaultWorkspaceSetup } = require("../../shared/constants/workspace-setup");
+        tenant.setup = defaultWorkspaceSetup();
+      }
+
       await tenant.save();
 
       provisioning.workspaceUrl = buildWorkspaceUrl(tenant.slug);

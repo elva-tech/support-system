@@ -17,6 +17,11 @@ export interface PlatformTenant {
     branding?: Record<string, unknown>;
     notifications?: Record<string, unknown>;
   };
+  setup?: {
+    status: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+    progress?: { completed: number; total: number };
+    completedAt?: string | null;
+  };
   createdAt?: string;
   updatedAt?: string;
 }

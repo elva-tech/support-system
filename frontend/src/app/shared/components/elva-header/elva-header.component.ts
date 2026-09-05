@@ -10,14 +10,14 @@ import { RouterLink } from '@angular/router';
       <div class="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 sm:gap-4">
         <a routerLink="/" class="inline-flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
           <img
-            src="/images/elva-logo.png"
-            alt="ELVA — Elevating Value"
+            [src]="logoUrl()"
+            [alt]="productName()"
             class="h-12 w-12 shrink-0 rounded-md object-cover sm:h-14 sm:w-14"
           />
           @if (showTitle()) {
             <div class="min-w-0 text-left leading-tight">
               <p class="text-[10px] font-semibold uppercase tracking-wider text-white/70 sm:text-xs">
-                ELVA Support
+                {{ productName() }}
               </p>
               <p class="truncate text-sm font-bold text-white sm:text-base">{{ subtitle() }}</p>
               @if (tagline()) {
@@ -50,6 +50,8 @@ export class ElvaHeaderComponent {
   readonly align = input<'left' | 'center'>('left');
   readonly subtitle = input('Customer Help Center');
   readonly tagline = input('Elevating Value');
+  readonly productName = input('ELVA Support');
+  readonly logoUrl = input('/images/elva-logo.png');
   readonly showTitle = input(true);
   readonly compactActions = input(false);
   readonly showActionsOnMobile = input(false);

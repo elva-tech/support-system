@@ -242,6 +242,20 @@ export const routes: Routes = [
         path: 'users',
         canActivate: [roleGuard('ADMIN')],
         loadComponent: () => import('./features/users/users.component').then((m) => m.UsersComponent)
+      },
+      {
+        path: 'setup',
+        canActivate: [roleGuard('ADMIN')],
+        loadComponent: () =>
+          import('./features/workspace/workspace-setup.component').then((m) => m.WorkspaceSetupComponent)
+      },
+      {
+        path: 'settings',
+        canActivate: [roleGuard('ADMIN')],
+        loadComponent: () =>
+          import('./features/workspace/workspace-settings.component').then(
+            (m) => m.WorkspaceSettingsComponent
+          )
       }
     ]
   },

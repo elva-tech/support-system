@@ -25,6 +25,7 @@ const inboundEmailWebhookRoutes = require("./modules/email/email-inbound-webhook
 const platformAdminRoutes = require("./modules/platform-admin/platform-admin.routes");
 const tenantProvisioningRoutes = require("./modules/tenant-provisioning/tenant-provisioning.routes");
 const onboardingRoutes = require("./modules/tenant-provisioning/onboarding.routes");
+const workspaceRoutes = require("./modules/workspace/workspace.routes");
 
 const {
   logsViewerMiddleware,
@@ -88,6 +89,7 @@ app.use("/api/platform", tenantProvisioningRoutes);
 app.use("/api/platform", platformAdminRoutes);
 /** Public tenant admin onboarding (invitation token based). */
 app.use("/api/onboarding", onboardingRoutes);
+app.use("/api/workspace", workspaceRoutes);
 app.use("/api/applications", applicationRoutes);
 app.use("/api/modules", moduleRoutes);
 app.use("/api/teams", teamRoutes);

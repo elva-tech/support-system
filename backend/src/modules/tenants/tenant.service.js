@@ -4,6 +4,7 @@ const {
   ELVA_TENANT_SEED,
   TENANT_STATUSES
 } = require("../../shared/constants/tenant");
+const { defaultWorkspaceSetup } = require("../../shared/constants/workspace-setup");
 const {
   assertValidTenantName,
   assertValidTenantSlug,
@@ -25,7 +26,7 @@ const defaultSettings = () => ({
  * Create a tenant. Slug is normalized to lowercase before validation.
  * Reserved and invalid slugs are rejected. Duplicate slugs → 409.
  */
-const create = async ({ name, slug, status = DEFAULT_TENANT_STATUS, settings } = {}) => {
+const create = async ({ name, slug, status = DEFAULT_TENANT_STATUS, settings, setup } = {}) => {
   const normalizedName = assertValidTenantName(name);
   const normalizedSlug = assertValidTenantSlug(slug);
   assertValidTenantStatus(status);
@@ -40,7 +41,8 @@ const create = async ({ name, slug, status = DEFAULT_TENANT_STATUS, settings } =
       name: normalizedName,
       slug: normalizedSlug,
       status,
-      settings: settings || defaultSettings()
+      settings: settings || defaultSettings(),
+      setup: setup || defaultWorkspaceSetup()
     });
   } catch (error) {
     if (error && error.code === 11000) {

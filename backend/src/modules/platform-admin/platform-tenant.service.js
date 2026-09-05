@@ -13,6 +13,7 @@ const {
 const { TENANT_STATUSES } = require("../../shared/constants/tenant");
 const { invalidTenantStatusTransition } = require("./platform-admin.errors");
 const { logPlatformAudit } = require("./platform-audit.service");
+const { setupSummaryForPlatform } = require("../workspace/workspace.service");
 
 const toPublicTenant = (tenant) => {
   if (!tenant) {
@@ -25,6 +26,7 @@ const toPublicTenant = (tenant) => {
     slug: obj.slug,
     status: obj.status,
     settings: obj.settings || { organization: {}, branding: {}, notifications: {} },
+    setup: setupSummaryForPlatform(obj),
     createdAt: obj.createdAt,
     updatedAt: obj.updatedAt
   };
