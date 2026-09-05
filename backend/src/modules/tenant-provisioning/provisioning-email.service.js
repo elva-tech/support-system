@@ -2,6 +2,7 @@ const notificationManager = require("../notifications/notification-manager.servi
 const logger = require("../../shared/utils/logger");
 const env = require("../../config/env");
 const { renderTenantAdminInvitationEmail } = require("../notifications/email-templates");
+const { buildEmailBranding } = require("../../shared/utils/tenant-ops.util");
 
 /**
  * Welcome / invitation email for provisioned tenant administrators.
@@ -13,8 +14,10 @@ const sendTenantAdminInvitationEmail = async ({
   tenantName,
   workspaceUrl,
   invitationUrl,
-  expiryHours
+  expiryHours,
+  tenant = null
 }) => {
+  const branding = buildEmailBranding(tenant);
   const result = await notificationManager.sendEmail({
     to,
     subject: `Welcome to ELVA Support — activate your ${tenantName} workspace`,
@@ -24,7 +27,8 @@ const sendTenantAdminInvitationEmail = async ({
       workspaceUrl,
       invitationUrl,
       expiryHours: expiryHours || env.tenantProvisioning.invitationExpiryHours,
-      supportEmail: env.email.supportAddress
+      supportEmail: env.email.supportAddress,
+      branding
     })
   });
 

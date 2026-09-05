@@ -23,6 +23,8 @@ const authenticate = async (req, res, next) => {
     const decoded = jwt.verify(token, env.jwtSecret);
 
     if (decoded.identityType === PLATFORM_IDENTITY_TYPE) {
+      const { SECURITY_EVENTS, logSecurityEvent } = require("../observability/security-events");
+      logSecurityEvent(SECURITY_EVENTS.PLATFORM_TOKEN_TENANT_API_BLOCKED, req);
       return next(new ApiError(401, "Tenant staff authentication required"));
     }
 

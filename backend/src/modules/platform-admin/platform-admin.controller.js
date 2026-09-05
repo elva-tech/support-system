@@ -6,11 +6,24 @@ const { listPlatformAudit } = require("./platform-audit.service");
 
 const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-  const result = await platformAuthService.login(email, password);
-  res.json({
-    message: "Platform login successful",
-    data: result
-  });
+  const { SECURITY_EVENTS, logSecurityEvent } = require("../../shared/observability/security-events");
+  try {
+    const result = await platformAuthService.login(email, password);
+    logSecurityEvent(SECURITY_EVENTS.PLATFORM_LOGIN_SUCCEEDED, req, {
+      platformAdminId: result.admin?._id ? String(result.admin._id) : undefined
+    });
+    res.json({
+      message: "Platform login successful",
+      data: result
+    });
+  } catch (err) {
+    if (err.statusCode === 401) {
+      logSecurityEvent(SECURITY_EVENTS.PLATFORM_LOGIN_FAILED, req, {
+        reason: "invalid_credentials"
+      });
+    }
+    throw err;
+  }
 });
 
 const getMe = asyncHandler(async (req, res) => {

@@ -105,10 +105,45 @@ module.exports = {
   uploadsDir: process.env.UPLOADS_DIR || path.join(__dirname, "../../uploads"),
   uploadMaxFileSize: parseFileSize(process.env.UPLOAD_MAX_FILE_SIZE, 10 * 1024 * 1024),
   rateLimit: {
-    loginMax: parseInt(process.env.RATE_LIMIT_LOGIN_MAX, 10) || 10,
-    otpMax: parseInt(process.env.RATE_LIMIT_OTP_MAX, 10) || 5,
-    windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000
+    enabled: process.env.RATE_LIMIT_ENABLED !== "false",
+    /** @deprecated use authMax — kept for callers */
+    loginMax:
+      parseInt(process.env.AUTH_RATE_LIMIT_MAX || process.env.RATE_LIMIT_LOGIN_MAX, 10) || 10,
+    authMax:
+      parseInt(process.env.AUTH_RATE_LIMIT_MAX || process.env.RATE_LIMIT_LOGIN_MAX, 10) || 10,
+    otpMax:
+      parseInt(process.env.OTP_RATE_LIMIT_MAX || process.env.RATE_LIMIT_OTP_MAX, 10) || 5,
+    windowMs:
+      parseInt(
+        process.env.AUTH_RATE_LIMIT_WINDOW_MS || process.env.RATE_LIMIT_WINDOW_MS,
+        10
+      ) || 15 * 60 * 1000,
+    authWindowMs:
+      parseInt(
+        process.env.AUTH_RATE_LIMIT_WINDOW_MS || process.env.RATE_LIMIT_WINDOW_MS,
+        10
+      ) || 15 * 60 * 1000,
+    otpWindowMs:
+      parseInt(
+        process.env.OTP_RATE_LIMIT_WINDOW_MS ||
+          process.env.AUTH_RATE_LIMIT_WINDOW_MS ||
+          process.env.RATE_LIMIT_WINDOW_MS,
+        10
+      ) || 15 * 60 * 1000
   },
+  logging: {
+    level: process.env.LOG_LEVEL || "info",
+    format: process.env.LOG_FORMAT || (isProduction ? "json" : "pretty"),
+    requests: process.env.LOG_REQUESTS !== "false",
+    healthRequests: process.env.LOG_HEALTH_REQUESTS === "true",
+    morgan: process.env.LOG_MORGAN === "true"
+  },
+  gracefulShutdownTimeoutMs:
+    parseInt(process.env.GRACEFUL_SHUTDOWN_TIMEOUT_MS, 10) || 15000,
+  metricsEndpointEnabled: process.env.METRICS_ENDPOINT_ENABLED === "true",
+  appVersion: process.env.APP_VERSION || "",
+  gitSha: process.env.GIT_SHA || process.env.RENDER_GIT_COMMIT || "",
+  buildTimestamp: process.env.BUILD_TIMESTAMP || "",
   googleDrive: {
     useMock: process.env.GOOGLE_DRIVE_MOCK !== "false",
     parentFolderId: process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID || "",

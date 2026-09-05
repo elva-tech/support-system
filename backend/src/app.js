@@ -4,8 +4,11 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 const env = require("./config/env");
 const errorHandler = require("./shared/middleware/error.middleware");
+const { requestIdMiddleware } = require("./shared/middleware/request-id.middleware");
+const { accessLogMiddleware } = require("./shared/middleware/access-log.middleware");
 const { getHealth, getLiveness, getReadiness } = require("./shared/health/health.service");
 const { isAllowedCorsOrigin } = require("./shared/utils/cors-origin.util");
+const { toPrometheusText } = require("./shared/observability/metrics");
 
 const authRoutes = require("./modules/auth/auth.routes");
 const applicationRoutes = require("./modules/applications/application.routes");
@@ -66,7 +69,12 @@ app.use(
     credentials: true
   })
 );
-app.use(morgan(env.isProduction ? "combined" : "dev"));
+// Phase 14: correlation + access logs (before routes). Morgan optional to avoid duplicates.
+app.use(requestIdMiddleware);
+app.use(accessLogMiddleware);
+if (env.logging?.morgan || process.env.LOG_MORGAN === "true") {
+  app.use(morgan(env.isProduction ? "combined" : "dev"));
+}
 app.use(
   "/api/webhooks/inbound-email",
   express.json({ limit: "15mb" }),
@@ -96,6 +104,22 @@ app.get("/health/detail", async (_req, res) => {
   const health = await getHealth();
   const statusCode = health.status === "ok" ? 200 : 503;
   res.status(statusCode).json(health);
+});
+
+/**
+ * Optional low-cardinality metrics (Phase 14).
+ * Enable with METRICS_ENDPOINT_ENABLED=true and protect via reverse proxy or INTERNAL_API_KEY.
+ */
+app.get("/metrics", (req, res) => {
+  if (!env.metricsEndpointEnabled) {
+    return res.status(404).json({ message: "Route not found" });
+  }
+  const key = req.headers["x-internal-api-key"];
+  if (!key || key !== env.internalApiKey) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  res.setHeader("Content-Type", "text/plain; version=0.0.4");
+  res.status(200).send(toPrometheusText());
 });
 
 app.use("/api/auth", authRoutes);

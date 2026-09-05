@@ -25,6 +25,8 @@ const authenticatePlatformAdmin = async (req, res, next) => {
     const decoded = jwt.verify(token, env.jwtSecret);
 
     if (decoded.identityType !== PLATFORM_IDENTITY_TYPE) {
+      const { SECURITY_EVENTS, logSecurityEvent } = require("../observability/security-events");
+      logSecurityEvent(SECURITY_EVENTS.TENANT_TOKEN_PLATFORM_API_BLOCKED, req);
       return next(
         new ApiError(401, "Platform authentication required", {
           code: PLATFORM_ERROR_CODES.PLATFORM_ACCESS_DENIED

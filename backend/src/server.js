@@ -18,6 +18,13 @@ const emailWorker = require("./modules/email/email-worker.service");
 const emailInboundService = require("./modules/email/email-inbound.service");
 const emailInboundWebhookService = require("./modules/email/email-inbound-webhook.service");
 const { isSmtpConfigured } = require("./modules/notifications/smtp.config");
+const { getAppVersionMeta } = require("./shared/observability/app-version");
+const {
+  registerGracefulShutdown,
+  registerProcessErrorHandlers
+} = require("./shared/observability/shutdown");
+
+registerProcessErrorHandlers();
 
 const start = async () => {
   try {
@@ -47,7 +54,7 @@ const start = async () => {
       }
     } else if (!emailInboundService.isConfigured()) {
       logger.warn(
-        "Email IMAP inbound enabled but not configured — set EMAIL_IMAP_HOST, EMAIL_IMAP_USER, EMAIL_IMAP_PASSWORD"
+        "Email inbound enabled but IMAP is not configured — set EMAIL_IMAP_HOST, EMAIL_IMAP_USER, EMAIL_IMAP_PASSWORD"
       );
     }
 
@@ -67,10 +74,18 @@ const start = async () => {
       logger.info("ELVA Support API started", {
         port: env.port,
         nodeEnv: env.nodeEnv,
+        ...getAppVersionMeta(),
         storage: env.googleDrive.useMock ? "mock" : "google_drive",
         notificationProvider: env.notifications.provider,
-        notificationFallback: env.notifications.fallbackEnabled
+        notificationFallback: env.notifications.fallbackEnabled,
+        rateLimitEnabled: env.rateLimit.enabled,
+        gracefulShutdownTimeoutMs: env.gracefulShutdownTimeoutMs
       });
+    });
+
+    registerGracefulShutdown(server, {
+      timeoutMs: env.gracefulShutdownTimeoutMs,
+      workers: [notificationWorker, emailWorker]
     });
 
     server.on("error", (error) => {

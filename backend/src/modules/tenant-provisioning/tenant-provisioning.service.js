@@ -348,7 +348,8 @@ const runProvisioningPipeline = async (provisioning, { actor, tenantPayload } = 
         tenantName: tenant.name,
         workspaceUrl: provisioning.workspaceUrl || buildWorkspaceUrl(tenant.slug),
         invitationUrl,
-        expiryHours: env.tenantProvisioning.invitationExpiryHours
+        expiryHours: env.tenantProvisioning.invitationExpiryHours,
+        tenant
       });
 
       if (emailResult.success) {
@@ -646,7 +647,8 @@ const resendInvitation = async (id, { actor } = {}) => {
     tenantName: tenant.name,
     workspaceUrl: provisioning.workspaceUrl || buildWorkspaceUrl(tenant.slug),
     invitationUrl,
-    expiryHours: env.tenantProvisioning.invitationExpiryHours
+    expiryHours: env.tenantProvisioning.invitationExpiryHours,
+    tenant
   });
 
   if (emailResult.success) {

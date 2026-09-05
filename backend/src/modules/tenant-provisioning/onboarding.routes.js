@@ -1,7 +1,7 @@
 const express = require("express");
 const controller = require("./tenant-provisioning.controller");
 const validate = require("../../shared/middleware/validate.middleware");
-const { loginLimiter } = require("../../shared/middleware/rate-limit.middleware");
+const { onboardingLimiter } = require("../../shared/middleware/rate-limit.middleware");
 const {
   completeSetupValidation,
   invitationTokenParam
@@ -11,7 +11,7 @@ const router = express.Router();
 
 router.get(
   "/invitation/:token",
-  loginLimiter,
+  onboardingLimiter,
   invitationTokenParam,
   validate,
   controller.getInvitation
@@ -19,7 +19,7 @@ router.get(
 
 router.post(
   "/complete-setup",
-  loginLimiter,
+  onboardingLimiter,
   completeSetupValidation,
   validate,
   controller.completeSetup

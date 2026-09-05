@@ -49,12 +49,18 @@ const resendInvitation = asyncHandler(async (req, res) => {
  * Never reveals which email/token type failed.
  */
 const getInvitation = asyncHandler(async (req, res) => {
+  const { SECURITY_EVENTS, logSecurityEvent } = require("../../shared/observability/security-events");
   const adminInvite = await provisioningService.validateInvitationToken(req.params.token);
   if (adminInvite.valid) {
     return res.json({ data: adminInvite });
   }
 
   const staffInvite = await staffInvitationService.validateStaffInvitationToken(req.params.token);
+  if (!staffInvite?.valid) {
+    logSecurityEvent(SECURITY_EVENTS.INVITATION_TOKEN_INVALID, req, {
+      reason: "validation_failed"
+    });
+  }
   res.json({ data: staffInvite });
 });
 

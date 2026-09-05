@@ -27,7 +27,7 @@ Copy this checklist for each production cutover.
 - [ ] Backup taken
 - [ ] `npm run migrate:status`
 - [ ] `npm run migrate:up` (intentional — not automatic)
-- [ ] Confirm Phase 13 needs **no** new migration
+- [ ] Confirm Phase 13/14 need **no** new migration (Phase 14: none)
 
 ## Platform Admin Bootstrap
 - [ ] `npm run ensure:platform-admin` only when creating/rotating platform admin
@@ -50,8 +50,9 @@ Copy this checklist for each production cutover.
 - [ ] `npm run verify:production-config`
 
 ## Health Checks
-- [ ] `GET /health` → `{ "status": "ok" }`
-- [ ] `GET /health/ready` → `{ "status": "ready" }`
+- [ ] `GET /health` → `{ "status": "ok" }` (liveness — LB)
+- [ ] `GET /health/ready` → `{ "status": "ready" }` (readiness — MongoDB)
+- [ ] Optional: `HEALTH_INCLUDE_VERSION=true` only if version on liveness is desired
 
 ## Host Verification
 - [ ] `https://admin.elvasupport.in` → Platform
@@ -59,7 +60,16 @@ Copy this checklist for each production cutover.
 - [ ] `https://unknown.elvasupport.in` → unavailable (not ELVA)
 - [ ] `https://api.elvasupport.in` not treated as a tenant portal
 
+## Observability / Security (Phase 14)
+- [ ] `LOG_FORMAT=json`, `LOG_LEVEL=info`, `LOG_HEALTH_REQUESTS=false`
+- [ ] `RATE_LIMIT_ENABLED=true` with production AUTH/OTP limits
+- [ ] `TRUST_PROXY` correct so rate-limit IP is accurate
+- [ ] `GRACEFUL_SHUTDOWN_TIMEOUT_MS` set appropriately
+- [ ] Optional `APP_VERSION` / `GIT_SHA` set by CI
+- [ ] Operators have runbooks: backup, incident, troubleshooting, rollback
+
 ## Rollback
 - [ ] Previous app artifact identified
 - [ ] Env snapshot saved
-- [ ] Rollback procedure understood (no Phase 13 DB undo required)
+- [ ] Rollback procedure understood ([rollback.md](./rollback.md))
+- [ ] Phase 14 needs **no** DB undo

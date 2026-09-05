@@ -236,12 +236,14 @@ const renderTenantAdminInvitationEmail = ({
   workspaceUrl,
   invitationUrl,
   expiryHours,
-  supportEmail
+  supportEmail,
+  branding = null
 }) =>
   renderEmailLayout({
     heroTitle: "Activate your workspace",
-    heroSubtitle: "Welcome to ELVA Support",
+    heroSubtitle: branding?.supportDisplayName || "Welcome to ELVA Support",
     preheader: `Your ${tenantName} support workspace is ready`,
+    branding,
     bodyHtml: `
       ${renderParagraph(`Hello ${escapeHtml(adminName)},`)}
       ${renderParagraph("Welcome to ELVA Support. Your organization's support workspace has been created successfully.")}

@@ -188,16 +188,28 @@ const processBatch = async () => {
     }
 
     try {
+      logger.info("notification_job_start", {
+        jobId: event._id.toString(),
+        eventType: event.eventType,
+        tenantId: event.tenantId ? String(event.tenantId) : undefined
+      });
       const deliveryPayload = await buildDeliveryPayload(event);
       if (!event.tenantId && deliveryPayload.tenantId) {
         event.tenantId = deliveryPayload.tenantId;
         await NotificationEvent.findByIdAndUpdate(event._id, { tenantId: deliveryPayload.tenantId });
       }
       await notificationManager.sendNotification({ ...event.toObject(), tenantId: event.tenantId || deliveryPayload.tenantId, deliveryPayload });
-    } catch (error) {
-      logger.error("Notification worker failed to process event", {
-        eventId: event._id.toString(),
+      logger.info("notification_job_success", {
+        jobId: event._id.toString(),
         eventType: event.eventType,
+        tenantId: event.tenantId ? String(event.tenantId) : undefined
+      });
+    } catch (error) {
+      logger.error("notification_job_failure", {
+        jobId: event._id.toString(),
+        eventType: event.eventType,
+        tenantId: event.tenantId ? String(event.tenantId) : undefined,
+        errorCode: error.code || error.name,
         error: error.message
       });
       await NotificationEvent.findByIdAndUpdate(event._id, { processed: true });

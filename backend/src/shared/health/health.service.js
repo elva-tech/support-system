@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const packageJson = require("../../../package.json");
 const env = require("../../config/env");
+const { getAppVersionMeta } = require("../observability/app-version");
 
 const getStorageStatus = () => {
   if (env.googleDrive.useMock) {
@@ -14,10 +15,15 @@ const getStorageStatus = () => {
   return "unavailable";
 };
 
-/** Liveness — process is up; no dependency checks. */
-const getLiveness = () => ({
-  status: "ok"
-});
+/** Liveness — process is up; no dependency checks. Keep payload minimal for LB probes. */
+const getLiveness = () => {
+  const body = { status: "ok" };
+  if (process.env.HEALTH_INCLUDE_VERSION === "true") {
+    Object.assign(body, getAppVersionMeta());
+    body.environment = env.nodeEnv;
+  }
+  return body;
+};
 
 /** Readiness — MongoDB must be connected. */
 const getReadiness = async () => {
@@ -46,12 +52,15 @@ const getHealth = async () => {
 
   const storage = getStorageStatus();
   const status = mongodb === "connected" && storage !== "unavailable" ? "ok" : "degraded";
+  const versionMeta = getAppVersionMeta();
 
   return {
     status,
     mongodb,
     storage,
-    version: packageJson.version
+    version: versionMeta.version || packageJson.version,
+    ...versionMeta,
+    environment: env.nodeEnv
   };
 };
 

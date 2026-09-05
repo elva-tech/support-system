@@ -113,11 +113,25 @@ class NotificationManager {
     const primaryResult = await this._tryProvider(provider, "sendNotification", payload);
 
     if (primaryResult.success) {
+      logger.info("notification_delivery_success", {
+        eventId: event._id?.toString?.(),
+        tenantId: tenantId ? String(tenantId) : undefined,
+        provider: providerName,
+        attempt: 1
+      });
       await deliveryService.recordSuccess(providerName, event._id, deliveryOpts);
       await this._recordOutboundEmailThread(payload);
       await this._markEventProcessed(event._id);
       return { success: true, provider: providerName };
     }
+
+    logger.warn("notification_delivery_retry", {
+      eventId: event._id?.toString?.(),
+      tenantId: tenantId ? String(tenantId) : undefined,
+      provider: providerName,
+      attempt: 1,
+      error: primaryResult.error
+    });
 
     await deliveryService.recordFailure(
       providerName,
@@ -127,6 +141,11 @@ class NotificationManager {
     );
 
     if (!this.fallbackEnabled) {
+      logger.error("notification_delivery_exhausted", {
+        eventId: event._id?.toString?.(),
+        tenantId: tenantId ? String(tenantId) : undefined,
+        provider: providerName
+      });
       await this._markEventProcessed(event._id);
       return { success: false, provider: providerName };
     }
@@ -138,8 +157,21 @@ class NotificationManager {
     );
 
     if (fallbackResult.success) {
+      logger.info("notification_delivery_retry_success", {
+        eventId: event._id?.toString?.(),
+        tenantId: tenantId ? String(tenantId) : undefined,
+        provider: NOTIFICATION_PROVIDERS.FALLBACK,
+        attempt: 2
+      });
       await deliveryService.recordSuccess(NOTIFICATION_PROVIDERS.FALLBACK, event._id, deliveryOpts);
     } else {
+      logger.error("notification_delivery_exhausted", {
+        eventId: event._id?.toString?.(),
+        tenantId: tenantId ? String(tenantId) : undefined,
+        provider: NOTIFICATION_PROVIDERS.FALLBACK,
+        attempt: 2,
+        error: fallbackResult.error
+      });
       await deliveryService.recordFailure(
         NOTIFICATION_PROVIDERS.FALLBACK,
         fallbackResult.error || "Fallback delivery failed",
