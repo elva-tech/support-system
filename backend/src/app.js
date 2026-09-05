@@ -105,6 +105,7 @@ app.use("/api/omnichannel", omnichannelRoutes);
 app.use("/api/notification-center", notificationCenterRoutes);
 app.use("/api/inbound-mail-queue", inboundMailQueueRoutes);
 app.use("/api/audit", require("./modules/audit/audit.routes"));
+app.use("/api/platform/integrity", require("./modules/tenant-integrity/integrity.routes"));
 
 app.use((_req, res) => {
   res.status(404).json({ message: "Route not found" });

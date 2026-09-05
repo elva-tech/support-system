@@ -22,8 +22,27 @@ const {
 } = require("../../shared/utils/tenant-ops.util");
 const { createGoogleDriveService } = require("../../shared/services/google-drive/google-drive.service");
 const env = require("../../config/env");
+const { logAudit } = require("../audit/audit.service");
+const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/constants/audit-actions");
 
 const driveService = createGoogleDriveService();
+
+const workspaceActorName = (actor) =>
+  actor ? `${actor.firstName || ""} ${actor.lastName || ""}`.trim() || actor.email || "Admin" : "Admin";
+
+const logWorkspaceAudit = async (action, tenantId, actor, metadata = {}) => {
+  await logAudit({
+    entityType: ENTITY_TYPES.WORKSPACE,
+    entityId: tenantId,
+    action,
+    actorType: ACTOR_TYPES.AGENT,
+    actorId: actor?._id || null,
+    actorName: workspaceActorName(actor),
+    tenantId,
+    metadata,
+    skipNotificationEvent: true
+  });
+};
 
 const ORGANIZATION_FIELDS = [
   "displayName",
@@ -255,7 +274,7 @@ const getPublicBranding = async (tenantId) => {
   return publicBrandingPayload(tenant);
 };
 
-const updateOrganization = async (tenantId, payload = {}) => {
+const updateOrganization = async (tenantId, payload = {}, { actor } = {}) => {
   const tenant = await getTenantOrThrow(tenantId);
   const settings = toPlainSettings(tenant);
   const next = { ...settings.organization };
@@ -286,10 +305,18 @@ const updateOrganization = async (tenantId, payload = {}) => {
   await tenant.save();
 
   const setup = await refreshAndSaveSetup(tenant);
+  await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_ORGANIZATION_UPDATED, tenantId, actor, {
+    displayName: next.displayName || null
+  });
+  if (setup.status === WORKSPACE_SETUP_STATUSES.COMPLETED) {
+    await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_SETUP_COMPLETED, tenantId, actor, {
+      via: "organization"
+    });
+  }
   return { organization: next, setup };
 };
 
-const updateBranding = async (tenantId, payload = {}) => {
+const updateBranding = async (tenantId, payload = {}, { actor } = {}) => {
   const tenant = await getTenantOrThrow(tenantId);
   const settings = toPlainSettings(tenant);
   const next = { ...settings.branding };
@@ -321,6 +348,8 @@ const updateBranding = async (tenantId, payload = {}) => {
   await tenant.save();
   const setup = await refreshAndSaveSetup(tenant);
 
+  await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_BRANDING_UPDATED, tenantId, actor);
+
   return {
     branding: {
       supportDisplayName: next.supportDisplayName || "",
@@ -334,7 +363,7 @@ const updateBranding = async (tenantId, payload = {}) => {
   };
 };
 
-const skipSetupStep = async (tenantId, step) => {
+const skipSetupStep = async (tenantId, step, { actor } = {}) => {
   const skippable = ["branding", "users", "client"];
   if (!skippable.includes(step)) {
     throw new ApiError(400, "This setup step cannot be skipped");
@@ -345,10 +374,12 @@ const skipSetupStep = async (tenantId, step) => {
   setup.skipped[step] = true;
   tenant.setup = setup;
   await tenant.save();
-  return refreshAndSaveSetup(tenant);
+  const result = await refreshAndSaveSetup(tenant);
+  await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_SETUP_SKIPPED, tenantId, actor, { step });
+  return result;
 };
 
-const uploadLogo = async (tenantId, file) => {
+const uploadLogo = async (tenantId, file, { actor } = {}) => {
   if (!file) {
     throw new ApiError(400, "File is required");
   }
@@ -386,6 +417,10 @@ const uploadLogo = async (tenantId, file) => {
 
   const setup = await refreshAndSaveSetup(tenant);
 
+  await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_LOGO_UPLOADED, tenantId, actor, {
+    logoFileName: settings.branding.logoFileName
+  });
+
   return {
     branding: {
       supportDisplayName: settings.branding.supportDisplayName || "",
@@ -399,7 +434,7 @@ const uploadLogo = async (tenantId, file) => {
   };
 };
 
-const deleteLogo = async (tenantId) => {
+const deleteLogo = async (tenantId, { actor } = {}) => {
   const tenant = await getTenantOrThrow(tenantId);
   const settings = toPlainSettings(tenant);
   const folder = settings.branding.logoStorageFolder || buildBrandingStorageFolder(tenant.slug);
@@ -424,6 +459,7 @@ const deleteLogo = async (tenantId) => {
   await tenant.save();
 
   const setup = await refreshAndSaveSetup(tenant);
+  await logWorkspaceAudit(AUDIT_ACTIONS.WORKSPACE_LOGO_DELETED, tenantId, actor);
   return {
     branding: {
       supportDisplayName: settings.branding.supportDisplayName || "",

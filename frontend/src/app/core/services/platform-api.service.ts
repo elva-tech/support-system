@@ -90,6 +90,20 @@ export interface PlatformAuditItem {
   createdAt: string;
 }
 
+export interface IntegrityFinding {
+  id: string;
+  collection: string;
+  issueType: string;
+  severity: string;
+  recordId: string;
+  actualTenantId?: string | null;
+  expectedTenantId?: string | null;
+  suggestedTenantId?: string | null;
+  relatedRecord?: { type: string; id: string } | null;
+  repairable: boolean;
+  reason?: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PlatformApiService {
   private readonly http = inject(HttpClient);
@@ -192,18 +206,82 @@ export class PlatformApiService {
     );
   }
 
-  listAudit(query: { action?: string; limit?: number; skip?: number } = {}): Observable<
-    ApiResponse<PaginatedList<PlatformAuditItem>>
-  > {
+  listAudit(
+    query: {
+      action?: string;
+      targetType?: string;
+      search?: string;
+      from?: string;
+      to?: string;
+      tenantId?: string;
+      page?: number;
+      limit?: number;
+      skip?: number;
+    } = {}
+  ): Observable<ApiResponse<PaginatedList<PlatformAuditItem> & { page?: number; totalPages?: number }>> {
     let params = new HttpParams();
     Object.entries(query).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
         params = params.set(key, String(value));
       }
     });
-    return this.http.get<ApiResponse<PaginatedList<PlatformAuditItem>>>(
-      `${this.baseUrl}/audit`,
-      { params }
+    return this.http.get<
+      ApiResponse<PaginatedList<PlatformAuditItem> & { page?: number; totalPages?: number }>
+    >(`${this.baseUrl}/audit`, { params });
+  }
+
+  getIntegritySummary(): Observable<ApiResponse<Record<string, unknown>>> {
+    return this.http.get<ApiResponse<Record<string, unknown>>>(`${this.baseUrl}/integrity/summary`);
+  }
+
+  listIntegrityFindings(
+    query: Record<string, string | number | boolean | undefined> = {}
+  ): Observable<{
+    data: IntegrityFinding[];
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+    summary?: Record<string, number>;
+  }> {
+    let params = new HttpParams();
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params = params.set(key, String(value));
+      }
+    });
+    return this.http.get<{
+      data: IntegrityFinding[];
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+      summary?: Record<string, number>;
+    }>(`${this.baseUrl}/integrity/findings`, { params });
+  }
+
+  runIntegrityScan(collections?: string[]): Observable<{ data: Record<string, unknown>; findingsCount: number }> {
+    return this.http.post<{ data: Record<string, unknown>; findingsCount: number }>(
+      `${this.baseUrl}/integrity/scan`,
+      { collections }
+    );
+  }
+
+  repairIntegrity(payload: {
+    collection: string;
+    recordId: string;
+    tenantId: string;
+    confirmation: boolean;
+  }): Observable<{ message: string; data: Record<string, unknown> }> {
+    return this.http.post<{ message: string; data: Record<string, unknown> }>(
+      `${this.baseUrl}/integrity/repair`,
+      payload
+    );
+  }
+
+  repairIntegrityAuto(payload: {
+    collection: string;
+    dryRun?: boolean;
+    confirmation?: boolean;
+    limit?: number;
+  }): Observable<{ message: string; data: Record<string, unknown> }> {
+    return this.http.post<{ message: string; data: Record<string, unknown> }>(
+      `${this.baseUrl}/integrity/repair-auto`,
+      payload
     );
   }
 

@@ -10,11 +10,29 @@ const parsePagination = (query = {}) => {
   return { page, limit, skip };
 };
 
-const buildPaginationMeta = (page, limit, total) => ({
-  page,
-  limit,
-  total,
-  totalPages: total === 0 ? 0 : Math.ceil(total / limit)
-});
+/**
+ * Accepts positional (page, limit, total) or a single object { page, limit, total }.
+ * Object form is common across Phase 8–10 services.
+ */
+const buildPaginationMeta = (pageOrOpts, limit, total) => {
+  if (pageOrOpts && typeof pageOrOpts === "object" && !Array.isArray(pageOrOpts)) {
+    const page = pageOrOpts.page;
+    const lim = pageOrOpts.limit;
+    const tot = pageOrOpts.total;
+    return {
+      page,
+      limit: lim,
+      total: tot,
+      totalPages: tot === 0 ? 0 : Math.ceil(tot / lim)
+    };
+  }
+
+  return {
+    page: pageOrOpts,
+    limit,
+    total,
+    totalPages: total === 0 ? 0 : Math.ceil(total / limit)
+  };
+};
 
 module.exports = { parsePagination, buildPaginationMeta, DEFAULT_LIMIT, MAX_LIMIT };

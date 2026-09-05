@@ -1,6 +1,8 @@
 const asyncHandler = require("../../shared/utils/asyncHandler");
 const workspaceService = require("./workspace.service");
 
+const actorCtx = (req) => ({ actor: req.user });
+
 const getSettings = asyncHandler(async (req, res) => {
   const data = await workspaceService.getSettings(req.tenant._id);
   res.json({ data });
@@ -17,27 +19,27 @@ const getPublicBranding = asyncHandler(async (req, res) => {
 });
 
 const updateOrganization = asyncHandler(async (req, res) => {
-  const data = await workspaceService.updateOrganization(req.tenant._id, req.body);
+  const data = await workspaceService.updateOrganization(req.tenant._id, req.body, actorCtx(req));
   res.json({ message: "Organization settings updated", data });
 });
 
 const updateBranding = asyncHandler(async (req, res) => {
-  const data = await workspaceService.updateBranding(req.tenant._id, req.body);
+  const data = await workspaceService.updateBranding(req.tenant._id, req.body, actorCtx(req));
   res.json({ message: "Branding updated", data });
 });
 
 const skipStep = asyncHandler(async (req, res) => {
-  const data = await workspaceService.skipSetupStep(req.tenant._id, req.params.step);
+  const data = await workspaceService.skipSetupStep(req.tenant._id, req.params.step, actorCtx(req));
   res.json({ message: "Setup step skipped", data });
 });
 
 const uploadLogo = asyncHandler(async (req, res) => {
-  const data = await workspaceService.uploadLogo(req.tenant._id, req.file);
+  const data = await workspaceService.uploadLogo(req.tenant._id, req.file, actorCtx(req));
   res.status(201).json({ message: "Logo uploaded", data });
 });
 
 const deleteLogo = asyncHandler(async (req, res) => {
-  const data = await workspaceService.deleteLogo(req.tenant._id);
+  const data = await workspaceService.deleteLogo(req.tenant._id, actorCtx(req));
   res.json({ message: "Logo removed", data });
 });
 

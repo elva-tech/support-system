@@ -206,6 +206,7 @@ const verifyOtp = async (email, otpCode, sessionMeta = {}, { tenantId } = {}) =>
     actorType: ACTOR_TYPES.MERCHANT,
     actorId: merchant._id,
     actorName: merchant.merchantName,
+    tenantId: merchant.tenantId || null,
     metadata: { email: merchant.email }
   });
 

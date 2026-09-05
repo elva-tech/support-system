@@ -57,6 +57,12 @@ const listAdminsValidation = [
 
 const listAuditValidation = [
   query("action").optional().isString(),
+  query("targetType").optional().isString(),
+  query("search").optional().isString().isLength({ max: 80 }),
+  query("from").optional().isISO8601(),
+  query("to").optional().isISO8601(),
+  query("tenantId").optional().isMongoId(),
+  query("page").optional().isInt({ min: 1 }),
   query("limit").optional().isInt({ min: 1, max: 200 }),
   query("skip").optional().isInt({ min: 0 })
 ];

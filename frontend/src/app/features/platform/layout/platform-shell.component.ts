@@ -86,6 +86,11 @@ export class PlatformShellComponent {
       path: '/audit',
       roles: ['PLATFORM_SUPER_ADMIN', 'PLATFORM_ADMIN']
     },
+    {
+      label: 'Data Integrity',
+      path: '/integrity',
+      roles: ['PLATFORM_SUPER_ADMIN', 'PLATFORM_ADMIN']
+    },
     { label: 'Profile', path: '/profile' }
   ];
 

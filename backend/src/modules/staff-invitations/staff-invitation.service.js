@@ -22,11 +22,43 @@ const { withTenantFilter, stripClientTenantId } = require("../../shared/utils/te
 const onboardingEmail = require("../notifications/onboarding-email.service");
 const env = require("../../config/env");
 const logger = require("../../shared/utils/logger");
+const { logAudit } = require("../audit/audit.service");
+const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/constants/audit-actions");
 
 const populateOptions = [
   { path: "teamId", select: "name" },
   { path: "applicationIds", select: "name code" }
 ];
+
+const actorNameFromId = async (userId) => {
+  if (!userId) return "Admin";
+  const actor = await User.findById(userId).select("firstName lastName");
+  return actor ? `${actor.firstName} ${actor.lastName}` : "Admin";
+};
+
+const logStaffAudit = async ({
+  action,
+  user,
+  tenantId,
+  actorUserId,
+  metadata = {}
+}) => {
+  await logAudit({
+    entityType: ENTITY_TYPES.USER,
+    entityId: user._id,
+    action,
+    actorType: ACTOR_TYPES.AGENT,
+    actorId: actorUserId || null,
+    actorName: await actorNameFromId(actorUserId),
+    tenantId,
+    metadata: {
+      email: user.email,
+      role: user.role,
+      ...metadata
+    },
+    skipNotificationEvent: true
+  });
+};
 
 const deriveApplicationIdsFromTeam = async (teamId, { tenantId } = {}) => {
   const team = await Team.findOne(withTenantFilter(tenantId, { _id: teamId })).select("applicationId");
@@ -240,6 +272,13 @@ const inviteStaff = async (data, { tenantId, createdByUserId } = {}) => {
 
   await sendStaffInviteEmail({ tenant, user, rawToken });
 
+  await logStaffAudit({
+    action: AUDIT_ACTIONS.USER_INVITED,
+    user,
+    tenantId,
+    actorUserId: createdByUserId
+  });
+
   // Never return raw token
   return User.findOne(withTenantFilter(tenantId, { _id: user._id })).populate(populateOptions);
 };
@@ -274,10 +313,17 @@ const resendInvitation = async (userId, { tenantId, createdByUserId } = {}) => {
 
   await sendStaffInviteEmail({ tenant, user, rawToken });
 
+  await logStaffAudit({
+    action: AUDIT_ACTIONS.USER_INVITATION_RESENT,
+    user,
+    tenantId,
+    actorUserId: createdByUserId
+  });
+
   return User.findOne(withTenantFilter(tenantId, { _id: userId })).populate(populateOptions);
 };
 
-const revokeInvitation = async (userId, { tenantId } = {}) => {
+const revokeInvitation = async (userId, { tenantId, createdByUserId, actorUserId } = {}) => {
   const user = await User.findOne(withTenantFilter(tenantId, { _id: userId }));
   if (!user) {
     throw new ApiError(404, "User not found");
@@ -290,6 +336,13 @@ const revokeInvitation = async (userId, { tenantId } = {}) => {
     user.isActive = false;
     await user.save();
   }
+
+  await logStaffAudit({
+    action: AUDIT_ACTIONS.USER_INVITATION_REVOKED,
+    user,
+    tenantId,
+    actorUserId: createdByUserId || actorUserId
+  });
 
   return User.findOne(withTenantFilter(tenantId, { _id: userId })).populate(populateOptions);
 };
@@ -308,9 +361,25 @@ const setLifecycleStatus = async (userId, nextStatus, { tenantId, actorUserId } 
     throw new ApiError(400, "Invited users must complete account setup to become active");
   }
 
+  const previousStatus = user.status;
   user.status = nextStatus;
   user.isActive = isActiveFlagForStatus(nextStatus);
   await user.save();
+
+  const action =
+    nextStatus === USER_STATUSES.SUSPENDED
+      ? AUDIT_ACTIONS.USER_SUSPENDED
+      : nextStatus === USER_STATUSES.DEACTIVATED
+        ? AUDIT_ACTIONS.USER_DEACTIVATED
+        : AUDIT_ACTIONS.USER_REACTIVATED;
+
+  await logStaffAudit({
+    action,
+    user,
+    tenantId,
+    actorUserId,
+    metadata: { previousStatus, nextStatus }
+  });
 
   return User.findOne(withTenantFilter(tenantId, { _id: userId })).populate(populateOptions);
 };

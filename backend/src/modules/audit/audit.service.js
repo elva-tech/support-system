@@ -1,9 +1,13 @@
+const mongoose = require("mongoose");
 const AuditLog = require("./audit-log.model");
 const logger = require("../../shared/utils/logger");
 const notificationService = require("../notifications/notification.service");
 const { parsePagination, buildPaginationMeta } = require("../../shared/utils/pagination.util");
 const { withTenantFilter } = require("../../shared/utils/tenant-scope.util");
 const ApiError = require("../../shared/utils/ApiError");
+const { toPublicAuditLog } = require("./audit-redaction.util");
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const logAudit = async ({
   entityType,
@@ -25,11 +29,11 @@ const logAudit = async ({
       actorType,
       actorId,
       actorName,
-      metadata
+      metadata: metadata || {}
     });
 
     if (!skipNotificationEvent) {
-      await notificationService.createEvent(action, entityId, metadata, { tenantId });
+      await notificationService.createEvent(action, entityId, metadata || {}, { tenantId });
     }
 
     return entry;
@@ -62,22 +66,64 @@ const listTenantAuditLogs = async (filters = {}, { tenantId } = {}) => {
   if (filters.entityType) {
     query.entityType = filters.entityType;
   }
-  if (filters.entityId) {
+  if (filters.actorId && mongoose.Types.ObjectId.isValid(filters.actorId)) {
+    query.actorId = filters.actorId;
+  }
+  if (filters.entityId && mongoose.Types.ObjectId.isValid(filters.entityId)) {
     query.entityId = filters.entityId;
   }
-  if (filters.search) {
+
+  if (filters.from || filters.to) {
+    query.createdAt = {};
+    if (filters.from) {
+      const from = new Date(filters.from);
+      if (!Number.isNaN(from.getTime())) {
+        query.createdAt.$gte = from;
+      }
+    }
+    if (filters.to) {
+      const to = new Date(filters.to);
+      if (!Number.isNaN(to.getTime())) {
+        query.createdAt.$lte = to;
+      }
+    }
+    if (!Object.keys(query.createdAt).length) {
+      delete query.createdAt;
+    }
+  }
+
+  const search = String(filters.search || "").trim().slice(0, 80);
+  if (search) {
+    const rx = new RegExp(escapeRegex(search), "i");
     query.$or = [
-      { actorName: { $regex: filters.search, $options: "i" } },
-      { action: { $regex: filters.search, $options: "i" } }
+      { actorName: rx },
+      { action: rx },
+      { entityType: rx },
+      { "metadata.ticketNumber": rx },
+      { "metadata.email": rx }
     ];
   }
 
-  const [data, total] = await Promise.all([
-    AuditLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+  const [rows, total] = await Promise.all([
+    AuditLog.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     AuditLog.countDocuments(query)
   ]);
 
-  return { data, pagination: buildPaginationMeta({ page, limit, total }) };
+  return {
+    data: rows.map(toPublicAuditLog),
+    pagination: buildPaginationMeta({ page, limit, total })
+  };
 };
 
-module.exports = { logAudit, listTenantAuditLogs };
+const getTenantAuditLogById = async (id, { tenantId } = {}) => {
+  if (!tenantId) {
+    throw new ApiError(400, "Tenant context is required");
+  }
+  const entry = await AuditLog.findOne(withTenantFilter(tenantId, { _id: id })).lean();
+  if (!entry) {
+    throw new ApiError(404, "Audit log not found");
+  }
+  return toPublicAuditLog(entry);
+};
+
+module.exports = { logAudit, listTenantAuditLogs, getTenantAuditLogById };

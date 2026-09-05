@@ -81,6 +81,14 @@ export const routes: Routes = [
           )
       },
       {
+        path: 'integrity',
+        canActivate: [platformRoleGuard('PLATFORM_SUPER_ADMIN', 'PLATFORM_ADMIN')],
+        loadComponent: () =>
+          import('./features/platform/pages/platform-integrity.component').then(
+            (m) => m.PlatformIntegrityComponent
+          )
+      },
+      {
         path: 'profile',
         loadComponent: () =>
           import('./features/platform/pages/platform-profile.component').then(
@@ -242,6 +250,12 @@ export const routes: Routes = [
         path: 'users',
         canActivate: [roleGuard('ADMIN')],
         loadComponent: () => import('./features/users/users.component').then((m) => m.UsersComponent)
+      },
+      {
+        path: 'audit',
+        canActivate: [roleGuard('ADMIN')],
+        loadComponent: () =>
+          import('./features/audit/tenant-audit.component').then((m) => m.TenantAuditComponent)
       },
       {
         path: 'setup',

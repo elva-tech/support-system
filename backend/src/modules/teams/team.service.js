@@ -5,6 +5,11 @@ const Module = require("../modules/module.model");
 const User = require("../users/user.model");
 const { ROLES } = require("../../shared/constants/roles");
 const { stripClientTenantId, withTenantFilter } = require("../../shared/utils/tenant-scope.util");
+const { logAudit } = require("../audit/audit.service");
+const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/constants/audit-actions");
+
+const actorLabel = (actor) =>
+  actor ? `${actor.firstName || ""} ${actor.lastName || ""}`.trim() || actor.email || "Admin" : "Admin";
 
 const populateOptions = [
   { path: "applicationId", select: "name code" },
@@ -144,7 +149,7 @@ const buildTeamMemberIds = (teamLeadId, memberIds) => {
   return ids;
 };
 
-const create = async (data, { tenantId } = {}) => {
+const create = async (data, { tenantId, actor } = {}) => {
   if (!tenantId) {
     throw new ApiError(400, "Tenant context is required");
   }
@@ -170,12 +175,24 @@ const create = async (data, { tenantId } = {}) => {
   });
   await syncUsersTeamAssignment(team._id, memberIds, sanitized.teamLeadId, { tenantId });
 
+  await logAudit({
+    entityType: ENTITY_TYPES.TEAM,
+    entityId: team._id,
+    action: AUDIT_ACTIONS.TEAM_CREATED,
+    actorType: ACTOR_TYPES.AGENT,
+    actorId: actor?._id || null,
+    actorName: actorLabel(actor),
+    tenantId,
+    metadata: { name: team.name },
+    skipNotificationEvent: true
+  });
+
   return withStaffOnly(
     await Team.findOne(withTenantFilter(tenantId, { _id: team._id })).populate(populateOptions)
   );
 };
 
-const update = async (id, data, { tenantId } = {}) => {
+const update = async (id, data, { tenantId, actor } = {}) => {
   const team = await Team.findOne(withTenantFilter(tenantId, { _id: id })).populate(populateOptions);
 
   if (!team) {
@@ -202,13 +219,36 @@ const update = async (id, data, { tenantId } = {}) => {
 
   await syncUsersTeamAssignment(team._id, memberIds, sanitized.teamLeadId, { tenantId });
 
+  await logAudit({
+    entityType: ENTITY_TYPES.TEAM,
+    entityId: team._id,
+    action: AUDIT_ACTIONS.TEAM_UPDATED,
+    actorType: ACTOR_TYPES.AGENT,
+    actorId: actor?._id || null,
+    actorName: actorLabel(actor),
+    tenantId,
+    metadata: { name: team.name },
+    skipNotificationEvent: true
+  });
+
   return withStaffOnly(
     await Team.findOne(withTenantFilter(tenantId, { _id: id })).populate(populateOptions)
   );
 };
 
-const remove = async (id, { tenantId } = {}) => {
+const remove = async (id, { tenantId, actor } = {}) => {
   const team = await getById(id, { tenantId });
+  await logAudit({
+    entityType: ENTITY_TYPES.TEAM,
+    entityId: team._id,
+    action: AUDIT_ACTIONS.TEAM_DELETED,
+    actorType: ACTOR_TYPES.AGENT,
+    actorId: actor?._id || null,
+    actorName: actorLabel(actor),
+    tenantId,
+    metadata: { name: team.name },
+    skipNotificationEvent: true
+  });
   await team.deleteOne();
   return team;
 };

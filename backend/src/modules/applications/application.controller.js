@@ -1,7 +1,7 @@
 const asyncHandler = require("../../shared/utils/asyncHandler");
 const applicationService = require("./application.service");
 
-const tenantCtx = (req) => ({ tenantId: req.tenant._id });
+const tenantCtx = (req) => ({ tenantId: req.tenant._id, actor: req.user });
 
 const list = asyncHandler(async (req, res) => {
   const applications = await applicationService.list(req.query, tenantCtx(req));

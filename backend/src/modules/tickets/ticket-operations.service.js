@@ -72,6 +72,7 @@ const assignTicket = async (ticketId, userId, assigner, { tenantId } = {}) => {
     actorType: ACTOR_TYPES.AGENT,
     actorId: assigner._id,
     actorName: assignerName,
+    tenantId: ticket.tenantId || resolvedTenantId,
     metadata: {
       ticketNumber: ticket.ticketNumber,
       assignedTo: agent._id.toString(),

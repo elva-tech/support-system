@@ -93,6 +93,7 @@ const assignTicketToAgent = async (ticket, agent, { autoAssigned = false, fromQu
     action: AUDIT_ACTIONS.TICKET_ASSIGNED,
     actorType: ACTOR_TYPES.SYSTEM,
     actorName: autoAssigned ? "Auto-assign" : "System",
+    tenantId: ticket.tenantId || null,
     metadata: {
       ticketNumber: ticket.ticketNumber,
       assignedTo: agent._id.toString(),

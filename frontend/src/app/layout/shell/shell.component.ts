@@ -93,6 +93,7 @@ export class ShellComponent implements OnInit {
     { label: 'Clients', path: '/merchants', adminOnly: true },
     { label: 'Inbound Mail', path: '/inbound-mail', adminOnly: true },
     { label: 'Users', path: '/users', adminOnly: true },
+    { label: 'Audit Log', path: '/audit', adminOnly: true },
     { label: 'Settings', path: '/settings', adminOnly: true }
   ];
 

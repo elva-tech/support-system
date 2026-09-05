@@ -1,7 +1,7 @@
 const asyncHandler = require("../../shared/utils/asyncHandler");
 const moduleService = require("./module.service");
 
-const tenantCtx = (req) => ({ tenantId: req.tenant._id });
+const tenantCtx = (req) => ({ tenantId: req.tenant._id, actor: req.user });
 
 const list = asyncHandler(async (req, res) => {
   const modules = await moduleService.list(req.query, tenantCtx(req));

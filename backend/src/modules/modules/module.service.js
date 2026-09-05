@@ -3,6 +3,11 @@ const Module = require("./module.model");
 const Application = require("../applications/application.model");
 const Team = require("../teams/team.model");
 const { withTenantFilter } = require("../../shared/utils/tenant-scope.util");
+const { logAudit } = require("../audit/audit.service");
+const { AUDIT_ACTIONS, ACTOR_TYPES, ENTITY_TYPES } = require("../../shared/constants/audit-actions");
+
+const actorLabel = (actor) =>
+  actor ? `${actor.firstName || ""} ${actor.lastName || ""}`.trim() || actor.email || "Admin" : "Admin";
 
 const populateOptions = [
   { path: "applicationId", select: "name code tenantId" },
@@ -79,7 +84,7 @@ const getById = async (id, { tenantId } = {}) => {
   return moduleDoc;
 };
 
-const create = async (data, { tenantId } = {}) => {
+const create = async (data, { tenantId, actor } = {}) => {
   if (!tenantId) {
     throw new ApiError(400, "Tenant context is required");
   }
@@ -96,10 +101,22 @@ const create = async (data, { tenantId } = {}) => {
     isActive: data.isActive !== undefined ? data.isActive : true
   });
 
+  await logAudit({
+    entityType: ENTITY_TYPES.MODULE,
+    entityId: moduleDoc._id,
+    action: AUDIT_ACTIONS.MODULE_CREATED,
+    actorType: ACTOR_TYPES.AGENT,
+    actorId: actor?._id || null,
+    actorName: actorLabel(actor),
+    tenantId,
+    metadata: { name: moduleDoc.name, code: moduleDoc.code },
+    skipNotificationEvent: true
+  });
+
   return Module.findById(moduleDoc._id).populate(populateOptions);
 };
 
-const update = async (id, data, { tenantId } = {}) => {
+const update = async (id, data, { tenantId, actor } = {}) => {
   const moduleDoc = await getById(id, { tenantId });
 
   if (data.applicationId) {
@@ -126,11 +143,35 @@ const update = async (id, data, { tenantId } = {}) => {
   }
 
   await moduleDoc.save();
+
+  await logAudit({
+    entityType: ENTITY_TYPES.MODULE,
+    entityId: moduleDoc._id,
+    action: AUDIT_ACTIONS.MODULE_UPDATED,
+    actorType: ACTOR_TYPES.AGENT,
+    actorId: actor?._id || null,
+    actorName: actorLabel(actor),
+    tenantId,
+    metadata: { name: moduleDoc.name, code: moduleDoc.code },
+    skipNotificationEvent: true
+  });
+
   return Module.findById(id).populate(populateOptions);
 };
 
-const remove = async (id, { tenantId } = {}) => {
+const remove = async (id, { tenantId, actor } = {}) => {
   const moduleDoc = await getById(id, { tenantId });
+  await logAudit({
+    entityType: ENTITY_TYPES.MODULE,
+    entityId: moduleDoc._id,
+    action: AUDIT_ACTIONS.MODULE_DELETED,
+    actorType: ACTOR_TYPES.AGENT,
+    actorId: actor?._id || null,
+    actorName: actorLabel(actor),
+    tenantId,
+    metadata: { name: moduleDoc.name, code: moduleDoc.code },
+    skipNotificationEvent: true
+  });
   await moduleDoc.deleteOne();
   return moduleDoc;
 };
