@@ -9,31 +9,27 @@ import {
   normalizeHexColor,
   resolveThemeColors
 } from './default-branding';
+import {
+  ELVA_FAVICON_PATH,
+  NEUTRAL_WORKSPACE_ICON,
+  PortalBootstrapState,
+  WorkspaceBranding
+} from './branding.types';
 
-export interface WorkspaceBranding {
-  productName: string;
-  displayName: string;
-  organizationName: string;
-  primaryColor: string | null;
-  secondaryColor: string | null;
-  logoUrl: string | null;
-  supportDisplayName: string;
-  loginTitle: string;
-  loginSubtitle: string;
-  customerLabel: CustomerLabel;
-  logoAvailable: boolean;
-}
+export type { PortalBootstrapState, WorkspaceBranding } from './branding.types';
+export { NEUTRAL_WORKSPACE_ICON, ELVA_FAVICON_PATH } from './branding.types';
 
 const THEME_CSS_VARS = [
   '--tenant-primary-color',
   '--tenant-secondary-color',
   '--tenant-primary-hover',
-  '--tenant-primary-light'
+  '--tenant-primary-light',
+  '--tenant-primary-contrast'
 ] as const;
 
 /**
- * Single source of truth for tenant presentation configuration (Phase 12).
- * Platform portal always uses ELVA defaults; tenant portal loads public branding.
+ * Single source of truth for tenant presentation + portal bootstrap readiness.
+ * Platform/apex use ELVA defaults immediately; tenant hosts never flash ELVA branding.
  */
 @Injectable({ providedIn: 'root' })
 export class BrandingService {
@@ -43,8 +39,10 @@ export class BrandingService {
   private logoObjectUrl: string | null = null;
   private loadedForSlug: string | null = null;
   private loadInFlight = false;
-  /** True when hostname maps to a tenant slug that does not exist (no ELVA fallback). */
+
   readonly workspaceUnavailable = signal(false);
+  readonly bootstrapState = signal<PortalBootstrapState>('idle');
+  readonly bootstrapError = signal<string | null>(null);
 
   readonly branding = computed<WorkspaceBranding>(() => {
     const override = this.overrideSignal();
@@ -52,26 +50,71 @@ export class BrandingService {
     return { ...defaults, ...override };
   });
 
-  /** Call once when entering a tenant portal (shell / login). Non-blocking. */
-  loadTenantBranding(): void {
+  readonly isPortalReady = computed(() => {
+    if (this.portal.isApexPortal || this.portal.isPlatformPortal) {
+      return true;
+    }
+    if (this.portal.isUnknownPortal) {
+      return true;
+    }
+    const state = this.bootstrapState();
+    return state === 'ready' || state === 'not-found' || state === 'error';
+  });
+
+  /** Start hostname-aware bootstrap once at app root. */
+  bootstrapPortal(): void {
+    if (this.portal.isApexPortal || this.portal.isPlatformPortal) {
+      this.workspaceUnavailable.set(false);
+      this.bootstrapError.set(null);
+      this.bootstrapState.set('ready');
+      this.applyPlatformDefaults();
+      return;
+    }
+
+    if (this.portal.isUnknownPortal) {
+      this.workspaceUnavailable.set(false);
+      this.bootstrapError.set(null);
+      this.bootstrapState.set('ready');
+      this.resetCssVariables();
+      return;
+    }
+
+    if (!this.portal.isTenantPortal || !this.portal.tenantSlug) {
+      this.bootstrapState.set('ready');
+      return;
+    }
+
+    this.loadTenantBranding({ force: false });
+  }
+
+  /** Call when entering a tenant portal (shell / login). Non-blocking after bootstrap. */
+  loadTenantBranding(options: { force?: boolean } = {}): void {
     if (this.portal.isPlatformPortal || this.portal.isApexPortal) {
       this.workspaceUnavailable.set(false);
+      this.bootstrapState.set('ready');
       this.applyPlatformDefaults();
       return;
     }
 
     if (!this.portal.isTenantPortal || !this.portal.tenantSlug) {
       this.applyCssVariables(null, null);
+      this.bootstrapState.set('ready');
       return;
     }
 
     const slug = this.portal.tenantSlug;
-    if (this.loadedForSlug === slug || this.loadInFlight) {
+    if (!options.force && (this.loadedForSlug === slug || this.loadInFlight)) {
       return;
     }
+
     this.loadedForSlug = slug;
     this.loadInFlight = true;
     this.workspaceUnavailable.set(false);
+    this.bootstrapError.set(null);
+    this.bootstrapState.set('loading');
+    // Neutral defaults only — never ELVA logo/colors on tenant hosts while loading
+    this.overrideSignal.set(null);
+    this.resetCssVariables();
 
     this.workspaceApi.getPublicBranding().subscribe({
       next: (res) => {
@@ -80,24 +123,26 @@ export class BrandingService {
         const data = res.data;
         const primary = normalizeHexColor(data.primaryColor);
         const secondary = normalizeHexColor(data.secondaryColor);
+        const hasLogo = Boolean(data.logoAvailable ?? data.hasLogo);
 
         this.applyTenantBranding({
-          productName: data.supportDisplayName || 'Support Workspace',
+          productName: data.supportDisplayName || data.organizationName || 'Support Workspace',
           displayName: data.organizationName || data.displayName || data.tenantName,
           organizationName: data.organizationName || data.displayName || data.tenantName,
-          supportDisplayName: data.supportDisplayName,
+          supportDisplayName: data.supportDisplayName || data.organizationName || 'Support',
           primaryColor: primary,
           secondaryColor: secondary,
           loginTitle: data.loginTitle || '',
           loginSubtitle: data.loginSubtitle || '',
           customerLabel: normalizeCustomerLabel(data.customerLabel),
-          logoAvailable: Boolean(data.logoAvailable ?? data.hasLogo),
-          logoUrl: this.defaultBranding().logoUrl
+          logoAvailable: hasLogo,
+          logoUrl: hasLogo ? null : NEUTRAL_WORKSPACE_ICON,
+          faviconUrl: hasLogo ? null : NEUTRAL_WORKSPACE_ICON
         });
 
         this.applyCssVariables(primary, secondary);
 
-        if (data.logoAvailable || data.hasLogo) {
+        if (hasLogo) {
           this.workspaceApi.fetchLogoBlob().subscribe({
             next: (blob) => {
               if (this.logoObjectUrl) {
@@ -107,13 +152,23 @@ export class BrandingService {
               this.applyTenantBranding({
                 ...this.overrideSignal(),
                 logoUrl: this.logoObjectUrl,
+                faviconUrl: this.logoObjectUrl,
                 logoAvailable: true
               });
+              this.bootstrapState.set('ready');
             },
             error: () => {
-              /* keep default logo — auth must still work */
+              this.applyTenantBranding({
+                ...this.overrideSignal(),
+                logoUrl: NEUTRAL_WORKSPACE_ICON,
+                faviconUrl: NEUTRAL_WORKSPACE_ICON,
+                logoAvailable: false
+              });
+              this.bootstrapState.set('ready');
             }
           });
+        } else {
+          this.bootstrapState.set('ready');
         }
       },
       error: (err) => {
@@ -121,24 +176,22 @@ export class BrandingService {
         this.loadedForSlug = null;
         const status = err?.status;
         const code = err?.error?.errors?.code || err?.error?.code;
-        // Unknown tenant host: do not fall back to ELVA branding as if workspace exists
         if (status === 404 || code === 'TENANT_NOT_FOUND') {
           this.workspaceUnavailable.set(true);
           this.overrideSignal.set(null);
-          this.applyCssVariables(null, null);
+          this.resetCssVariables();
+          this.bootstrapState.set('not-found');
+          this.bootstrapError.set('This workspace may no longer exist or the address may be incorrect.');
           return;
         }
-        // Transient API failure: keep neutral defaults so login remains possible
         this.workspaceUnavailable.set(false);
-        this.applyCssVariables(null, null);
+        this.bootstrapState.set('error');
+        this.bootstrapError.set(err?.error?.message || 'Failed to load workspace branding');
+        this.resetCssVariables();
       }
     });
   }
 
-  /**
-   * Apply branding from a validated invitation response (server-resolved).
-   * Never trust query-param branding.
-   */
   applyInvitationBranding(
     branding: {
       organizationName?: string;
@@ -160,24 +213,26 @@ export class BrandingService {
     const secondary = normalizeHexColor(branding.secondaryColor);
 
     this.applyTenantBranding({
-      productName: branding.supportDisplayName || ELVA_DEFAULT_BRANDING.productName,
-      displayName: branding.organizationName || ELVA_DEFAULT_BRANDING.organizationName,
-      organizationName: branding.organizationName || ELVA_DEFAULT_BRANDING.organizationName,
-      supportDisplayName: branding.supportDisplayName || ELVA_DEFAULT_BRANDING.supportDisplayName,
+      productName: branding.supportDisplayName || 'Support Workspace',
+      displayName: branding.organizationName || 'Support Workspace',
+      organizationName: branding.organizationName || 'Support Workspace',
+      supportDisplayName: branding.supportDisplayName || 'Support',
       primaryColor: primary,
       secondaryColor: secondary,
       loginTitle: branding.loginTitle || '',
       loginSubtitle: branding.loginSubtitle || '',
       customerLabel: normalizeCustomerLabel(branding.customerLabel),
-      logoAvailable: Boolean(branding.logoAvailable)
+      logoAvailable: Boolean(branding.logoAvailable),
+      logoUrl: branding.logoAvailable ? null : NEUTRAL_WORKSPACE_ICON,
+      faviconUrl: branding.logoAvailable ? null : NEUTRAL_WORKSPACE_ICON
     });
     this.applyCssVariables(primary, secondary);
+    this.bootstrapState.set('ready');
   }
 
-  /** Refresh after admin saves branding (clears cache). */
   refreshTenantBranding(): void {
     this.loadedForSlug = null;
-    this.loadTenantBranding();
+    this.loadTenantBranding({ force: true });
   }
 
   applyTenantBranding(partial: Partial<WorkspaceBranding> | null): void {
@@ -208,11 +263,17 @@ export class BrandingService {
     }
 
     const root = document.documentElement;
+    if (!primaryColor && this.portal.isTenantPortal) {
+      this.resetCssVariables();
+      return;
+    }
+
     const colors = resolveThemeColors(primaryColor, secondaryColor);
     root.style.setProperty('--tenant-primary-color', colors.primary);
     root.style.setProperty('--tenant-secondary-color', colors.secondary);
     root.style.setProperty('--tenant-primary-hover', colors.primaryHover);
     root.style.setProperty('--tenant-primary-light', colors.primaryLight);
+    root.style.setProperty('--tenant-primary-contrast', colors.primaryContrast);
   }
 
   resetCssVariables(): void {
@@ -226,19 +287,26 @@ export class BrandingService {
   }
 
   private defaultBranding(): WorkspaceBranding {
-    if (this.portal.isPlatformPortal) {
+    if (this.portal.isPlatformPortal || this.portal.isApexPortal) {
       return {
-        productName: 'ELVA Support Platform',
-        displayName: 'Platform Administration',
+        productName: this.portal.isPlatformPortal
+          ? 'ELVA Support Platform'
+          : ELVA_DEFAULT_BRANDING.productName,
+        displayName: this.portal.isPlatformPortal
+          ? 'Platform Administration'
+          : ELVA_DEFAULT_BRANDING.organizationName,
         organizationName: ELVA_DEFAULT_BRANDING.organizationName,
         primaryColor: ELVA_DEFAULT_BRANDING.primaryColor,
         secondaryColor: ELVA_DEFAULT_BRANDING.secondaryColor,
         logoUrl: ELVA_DEFAULT_BRANDING.logoPath,
         supportDisplayName: ELVA_DEFAULT_BRANDING.supportDisplayName,
-        loginTitle: 'Platform Sign In',
-        loginSubtitle: 'Sign in with your platform administrator credentials',
+        loginTitle: this.portal.isPlatformPortal ? 'Platform Sign In' : 'ELVA Support',
+        loginSubtitle: this.portal.isPlatformPortal
+          ? 'Sign in with your platform administrator credentials'
+          : 'Customer support platform',
         customerLabel: DEFAULT_CUSTOMER_LABEL,
-        logoAvailable: false
+        logoAvailable: true,
+        faviconUrl: ELVA_FAVICON_PATH
       };
     }
 
@@ -249,12 +317,13 @@ export class BrandingService {
       organizationName: slug ? `${slug} workspace` : 'Support Workspace',
       primaryColor: null,
       secondaryColor: null,
-      logoUrl: ELVA_DEFAULT_BRANDING.logoPath,
+      logoUrl: NEUTRAL_WORKSPACE_ICON,
       supportDisplayName: 'Support',
       loginTitle: 'Customer Help Center',
       loginSubtitle: 'Secure support portal for this workspace',
       customerLabel: DEFAULT_CUSTOMER_LABEL,
-      logoAvailable: false
+      logoAvailable: false,
+      faviconUrl: NEUTRAL_WORKSPACE_ICON
     };
   }
 }

@@ -22,7 +22,7 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
         [subtitle]="branding.branding().displayName || 'Staff Portal'"
         [productName]="branding.branding().productName"
         [tagline]="branding.branding().supportDisplayName"
-        [logoUrl]="branding.branding().logoUrl || '/images/elva-logo.png'"
+        [logoUrl]="branding.branding().logoUrl || ''"
       />
 
       <main class="flex flex-1 items-center justify-center px-4 py-8">
@@ -95,10 +95,6 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
       <app-elva-footer
         variant="dark"
         [companyName]="branding.branding().organizationName || branding.branding().productName"
-        websiteLabel=""
-        websiteUrl=""
-        supportEmail=""
-        [showTicketEmailHint]="false"
       />
     </div>
   `

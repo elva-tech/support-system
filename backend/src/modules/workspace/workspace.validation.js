@@ -55,7 +55,7 @@ const supportValidation = [
 ];
 
 const skipStepValidation = [
-  param("step").isIn(["branding", "users", "client"]).withMessage("Invalid skippable step")
+  param("step").isIn(["users", "client"]).withMessage("Invalid skippable step")
 ];
 
 module.exports = {

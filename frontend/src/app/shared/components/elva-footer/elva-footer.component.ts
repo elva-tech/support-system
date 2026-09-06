@@ -7,8 +7,7 @@ import { Component, input } from '@angular/core';
     <footer
       class="mt-auto w-full border-t px-4 py-6 sm:px-6"
       [class.border-white/10]="variant() === 'dark'"
-      [style.background-color]="variant() === 'dark' ? 'var(--tenant-primary-color)' : undefined"
-      [class.bg-elva-brand]="variant() === 'dark'"
+      [style.background-color]="variant() === 'dark' ? 'var(--tenant-primary-color, #13294b)' : undefined"
       [class.text-white/80]="variant() === 'dark'"
       [class.border-slate-200]="variant() === 'light'"
       [class.bg-white]="variant() === 'light'"
@@ -19,20 +18,22 @@ import { Component, input } from '@angular/core';
       >
         <div class="space-y-1">
           <p>&copy; {{ year }} {{ companyName() }}. All rights reserved.</p>
-          @if (websiteUrl() && websiteLabel()) {
-            <p>
-              <a
-                [href]="websiteUrl()"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="font-medium underline decoration-white/40 underline-offset-2 transition hover:text-white"
-                [class.hover:text-elva-800]="variant() === 'light'"
-                [class.decoration-elva-300]="variant() === 'light'"
-              >
-                {{ websiteLabel() }}
-              </a>
-            </p>
-          }
+          <p
+            class="text-white/70"
+            [class.text-slate-500]="variant() === 'light'"
+          >
+            An ELVA Tech Product ·
+            <a
+              href="https://elvatech.in"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="font-medium underline decoration-white/40 underline-offset-2 transition hover:text-white"
+              [class.hover:text-elva-800]="variant() === 'light'"
+              [class.decoration-elva-300]="variant() === 'light'"
+            >
+              elvatech.in
+            </a>
+          </p>
         </div>
 
         @if (supportEmail()) {
@@ -63,9 +64,7 @@ export class ElvaFooterComponent {
   readonly variant = input<'dark' | 'light'>('dark');
   /** Organization / product name shown in copyright */
   readonly companyName = input('ELVA Support');
-  readonly websiteLabel = input('elvatech.in');
-  readonly websiteUrl = input('https://elvatech.in');
-  readonly supportEmail = input('support@elvatech.in');
-  readonly showTicketEmailHint = input(true);
+  readonly supportEmail = input('');
+  readonly showTicketEmailHint = input(false);
   readonly year = new Date().getFullYear();
 }

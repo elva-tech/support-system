@@ -39,13 +39,51 @@ const {
 const env = require("../../config/env");
 const logger = require("../../shared/utils/logger");
 
+const sanitizeProvisioningError = (error) => {
+  if (error == null) return null;
+  if (typeof error === "string") {
+    return {
+      message: error.slice(0, 500),
+      code: "PROVISIONING_FAILED",
+      technicalDetails: null,
+      failedAt: new Date().toISOString(),
+      retryable: true
+    };
+  }
+  if (typeof error === "object" && error.message && !error.stack && error.code) {
+    return {
+      message: String(error.message).slice(0, 500),
+      code: String(error.code || "PROVISIONING_FAILED"),
+      technicalDetails: error.technicalDetails ? String(error.technicalDetails).slice(0, 300) : null,
+      failedAt: error.failedAt || new Date().toISOString(),
+      retryable: error.retryable !== false
+    };
+  }
+  const rawCode = error?.errors?.code ?? error?.code;
+  const code =
+    rawCode === 11000 || rawCode === "11000"
+      ? "UNIQUE_CONSTRAINT_VIOLATION"
+      : rawCode
+        ? String(rawCode)
+        : "PROVISIONING_FAILED";
+  const message = String(error?.message || error || "Provisioning step failed").slice(0, 500);
+  return {
+    message,
+    code,
+    technicalDetails: code !== "PROVISIONING_FAILED" ? code : null,
+    failedAt: new Date().toISOString(),
+    retryable: true
+  };
+};
+
 const markStep = (provisioning, stepKey, status, error = null) => {
   if (!provisioning.steps) {
     provisioning.steps = defaultProvisioningSteps();
   }
   const step = provisioning.steps[stepKey] || {};
   step.status = status;
-  step.error = error;
+  step.error =
+    status === PROVISIONING_STEP_STATUSES.FAILED ? sanitizeProvisioningError(error) : null;
   step.completedAt = status === PROVISIONING_STEP_STATUSES.COMPLETED ? new Date() : step.completedAt;
   if (status === PROVISIONING_STEP_STATUSES.PENDING) {
     step.completedAt = null;
@@ -91,12 +129,12 @@ const toPublicProvisioning = (doc) => {
 };
 
 const recordFailure = async (provisioning, atStep, error) => {
-  const message = error?.message || String(error);
-  markStep(provisioning, atStep, PROVISIONING_STEP_STATUSES.FAILED, message);
+  const details = sanitizeProvisioningError(error);
+  markStep(provisioning, atStep, PROVISIONING_STEP_STATUSES.FAILED, details);
   provisioning.status = PROVISIONING_STATUSES.FAILED;
   provisioning.failure = {
-    code: error?.errors?.code || "PROVISIONING_FAILED",
-    message,
+    code: details?.code || "PROVISIONING_FAILED",
+    message: details?.message || String(error),
     atStep,
     at: new Date()
   };

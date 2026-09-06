@@ -6,17 +6,17 @@ const WORKSPACE_SETUP_STATUSES = Object.freeze({
 
 const ALL_WORKSPACE_SETUP_STATUSES = Object.values(WORKSPACE_SETUP_STATUSES);
 
-/** Required for COMPLETED status (branding/users/client remain recommended). */
-const REQUIRED_SETUP_STEPS = Object.freeze(["organization", "team", "application"]);
-
 const ALL_SETUP_STEPS = Object.freeze([
   "organization",
   "branding",
-  "team",
   "application",
+  "team",
   "users",
   "client"
 ]);
+
+/** Required for COMPLETED status (users/client remain skippable). */
+const REQUIRED_SETUP_STEPS = Object.freeze(["organization", "branding", "application", "team"]);
 
 const defaultSetupSteps = () => ({
   organization: false,

@@ -4,6 +4,10 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { PlatformApiService, PlatformProvisioning } from '../../../core/services/platform-api.service';
 import { PlatformAuthService } from '../../../core/services/platform-auth.service';
 import { formatApiError } from '../../../shared/utils/api-error.util';
+import {
+  normalizeStepError,
+  suggestedActionForCode
+} from '../../../shared/utils/provisioning-error.util';
 
 @Component({
   selector: 'app-platform-provisioning-detail',
@@ -50,34 +54,53 @@ import { formatApiError } from '../../../shared/utils/api-error.util';
             </div>
           </dl>
 
+          @if (p.failure?.message) {
+            <div class="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <p class="font-semibold">{{ failureTitle(p) }}</p>
+              <p class="mt-2"><span class="font-medium">Reason:</span> {{ p.failure?.message }}</p>
+              @if (p.failure?.code) {
+                <p class="mt-1 text-xs">
+                  <span class="font-medium">Technical details:</span> {{ p.failure?.code }}
+                </p>
+              }
+              <p class="mt-2 text-slate-700">
+                <span class="font-medium">Suggested action:</span>
+                {{ suggestedActionForCode(p.failure?.code, p.failure?.message || '') }}
+              </p>
+            </div>
+          }
+
           <h2 class="mt-8 text-sm font-semibold text-slate-900">Steps</h2>
           <ul class="mt-3 space-y-2 text-sm">
             @for (step of steps(p); track step.key) {
-              <li class="flex justify-between rounded-lg bg-slate-50 px-3 py-2">
-                <span>{{ step.label }}</span>
-                <span class="font-medium">
-                  {{ step.status }}
-                  @if (step.error) {
-                    <span class="ml-2 text-xs font-normal text-red-600">{{ step.error }}</span>
-                  }
-                </span>
+              <li class="rounded-lg bg-slate-50 px-3 py-2">
+                <div class="flex justify-between gap-3">
+                  <span>{{ step.label }}</span>
+                  <span class="font-medium">{{ step.status }}</span>
+                </div>
+                @if (step.errorView; as ev) {
+                  <details class="mt-2 text-xs text-red-700">
+                    <summary class="cursor-pointer font-medium">Error details</summary>
+                    <p class="mt-1">{{ ev.message }}</p>
+                    @if (ev.code) {
+                      <p class="mt-1">Code: {{ ev.code }}</p>
+                    }
+                    @if (ev.technicalDetails) {
+                      <p class="mt-1">{{ ev.technicalDetails }}</p>
+                    }
+                    @if (ev.failedAt) {
+                      <p class="mt-1 text-slate-500">Failed at: {{ ev.failedAt }}</p>
+                    }
+                  </details>
+                }
               </li>
             }
           </ul>
 
-          @if (p.failure?.message) {
-            <div class="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              Failure: {{ p.failure?.message }}
-              @if (p.failure?.atStep) {
-                <span> (at {{ p.failure?.atStep }})</span>
-              }
-            </div>
-          }
-
           @if (canManage()) {
             <div class="mt-6 flex flex-wrap gap-3">
               <button type="button" class="btn-secondary" [disabled]="busy()" (click)="retry(p.id)">
-                Retry
+                Retry failed step
               </button>
               <button type="button" class="btn-primary" [disabled]="busy()" (click)="resend(p.id)">
                 Resend invitation
@@ -100,6 +123,7 @@ export class PlatformProvisioningDetailComponent implements OnInit {
   readonly error = signal('');
   readonly message = signal('');
   readonly busy = signal(false);
+  readonly suggestedActionForCode = suggestedActionForCode;
 
   ngOnInit(): void {
     const id = this.route.snapshot.paramMap.get('id');
@@ -114,7 +138,23 @@ export class PlatformProvisioningDetailComponent implements OnInit {
     return this.auth.hasRole('PLATFORM_SUPER_ADMIN', 'PLATFORM_ADMIN');
   }
 
-  steps(p: PlatformProvisioning): { key: string; label: string; status: string; error?: string | null }[] {
+  failureTitle(p: PlatformProvisioning): string {
+    const map: Record<string, string> = {
+      tenantCreated: 'Tenant creation failed',
+      workspaceInitialized: 'Workspace initialization failed',
+      adminCreated: 'Admin creation failed',
+      invitationCreated: 'Invitation creation failed',
+      welcomeEmail: 'Welcome email failed'
+    };
+    return map[p.failure?.atStep || ''] || 'Provisioning failed';
+  }
+
+  steps(p: PlatformProvisioning): {
+    key: string;
+    label: string;
+    status: string;
+    errorView: ReturnType<typeof normalizeStepError>;
+  }[] {
     const labels: Record<string, string> = {
       tenantCreated: 'Tenant created',
       workspaceInitialized: 'Workspace initialized',
@@ -123,8 +163,13 @@ export class PlatformProvisioningDetailComponent implements OnInit {
       welcomeEmail: 'Welcome email'
     };
     return Object.entries(labels).map(([key, label]) => {
-      const step = (p.steps as Record<string, { status?: string; error?: string | null }>)?.[key];
-      return { key, label, status: step?.status || 'PENDING', error: step?.error };
+      const step = (p.steps as Record<string, { status?: string; error?: unknown }>)?.[key];
+      return {
+        key,
+        label,
+        status: step?.status || 'PENDING',
+        errorView: normalizeStepError(step?.error)
+      };
     });
   }
 

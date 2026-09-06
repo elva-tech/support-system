@@ -8,11 +8,19 @@ import { BrandingService } from '../../core/portal/branding.service';
 import { CustomerTerminologyService } from '../../core/portal/customer-terminology.service';
 import { HEX_COLOR_PATTERN, CUSTOMER_LABEL_COPY, CustomerLabel } from '../../core/portal/default-branding';
 import { formatApiError } from '../../shared/utils/api-error.util';
+import { BrandColorPickerComponent } from '../../shared/components/brand-color-picker/brand-color-picker.component';
+import {
+  convertSlaDuration,
+  formatSlaDuration,
+  minutesToParts,
+  SLA_DURATION_UNITS,
+  SlaDurationUnit
+} from '../../shared/utils/sla-duration.util';
 
 @Component({
   selector: 'app-workspace-settings',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, BrandColorPickerComponent],
   template: `
     <div class="mx-auto max-w-3xl space-y-8">
       <div>
@@ -91,24 +99,12 @@ import { formatApiError } from '../../shared/utils/api-error.util';
           <input class="form-input" formControlName="supportDisplayName" placeholder="ABC Support" />
         </div>
         <div class="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label class="form-label">Primary color</label>
-            <div class="flex gap-2">
-              <input type="color" class="h-10 w-12 cursor-pointer rounded border border-slate-300" [value]="colorPickerPrimary()" (input)="onPrimaryPicker($event)" />
-              <input class="form-input" formControlName="primaryColor" placeholder="#13294b" />
-            </div>
-            @if (brandForm.controls.primaryColor.invalid && brandForm.controls.primaryColor.touched) {
-              <p class="mt-1 text-xs text-red-600">Use #RGB or #RRGGBB</p>
-            }
-          </div>
-          <div>
-            <label class="form-label">Secondary color</label>
-            <div class="flex gap-2">
-              <input type="color" class="h-10 w-12 cursor-pointer rounded border border-slate-300" [value]="colorPickerSecondary()" (input)="onSecondaryPicker($event)" />
-              <input class="form-input" formControlName="secondaryColor" placeholder="#4a6789" />
-            </div>
-          </div>
+          <app-brand-color-picker label="Primary color" formControlName="primaryColor" />
+          <app-brand-color-picker label="Secondary color" formControlName="secondaryColor" />
         </div>
+        @if (brandForm.controls.primaryColor.invalid && brandForm.controls.primaryColor.touched) {
+          <p class="text-xs text-red-600">Use #RGB or #RRGGBB for primary color</p>
+        }
         <div>
           <label class="form-label">Login page title</label>
           <input class="form-input" formControlName="loginTitle" placeholder="Welcome to ABC Support" />
@@ -182,8 +178,8 @@ import { formatApiError } from '../../shared/utils/api-error.util';
                 <tr class="border-b text-slate-500">
                   <th class="py-2 pr-3">Priority</th>
                   <th class="py-2 pr-3">Customer selectable</th>
-                  <th class="py-2 pr-3">Response (min)</th>
-                  <th class="py-2 pr-3">Resolution (min)</th>
+                  <th class="py-2 pr-3">Response</th>
+                  <th class="py-2 pr-3">Resolution</th>
                   <th class="py-2">Business hours</th>
                 </tr>
               </thead>
@@ -198,15 +194,26 @@ import { formatApiError } from '../../shared/utils/api-error.util';
                         (change)="toggleCustomerSelectable(p.code, $event)"
                       />
                     </td>
-                    <td class="py-2 pr-3">{{ policyMinutes(p.code, 'response') }}</td>
+                    <td class="py-2 pr-3 text-slate-700">{{ formatDuration(policyMinutes(p.code, 'response')) }}</td>
                     <td class="py-2 pr-3">
-                      <input
-                        class="form-input w-28"
-                        type="number"
-                        min="15"
-                        [value]="policyMinutes(p.code, 'resolution')"
-                        (change)="onResolutionMinutes(p.code, $event)"
-                      />
+                      <div class="flex flex-wrap items-center gap-1">
+                        <input
+                          class="form-input w-20"
+                          type="number"
+                          min="1"
+                          [value]="resolutionParts(p.code).value"
+                          (change)="onResolutionValue(p.code, $event)"
+                        />
+                        <select
+                          class="form-input w-28"
+                          [value]="resolutionParts(p.code).unit"
+                          (change)="onResolutionUnit(p.code, $event)"
+                        >
+                          @for (u of slaUnits; track u.value) {
+                            <option [value]="u.value">{{ u.label }}</option>
+                          }
+                        </select>
+                      </div>
                     </td>
                     <td class="py-2">{{ policyUsesBh(p.code) ? 'Yes' : 'No' }}</td>
                   </tr>
@@ -313,29 +320,11 @@ export class WorkspaceSettingsComponent implements OnInit {
     return CUSTOMER_LABEL_COPY[label] || CUSTOMER_LABEL_COPY.CLIENT;
   });
 
-  colorPickerPrimary(): string {
-    const v = this.brandForm.controls.primaryColor.value;
-    return HEX_COLOR_PATTERN.test(v) && v.length === 7 ? v : '#13294b';
-  }
-
-  colorPickerSecondary(): string {
-    const v = this.brandForm.controls.secondaryColor.value;
-    return HEX_COLOR_PATTERN.test(v) && v.length === 7 ? v : '#4a6789';
-  }
+  readonly slaUnits = SLA_DURATION_UNITS;
 
   previewPrimary(): string {
     const v = this.brandForm.controls.primaryColor.value;
     return HEX_COLOR_PATTERN.test(v) ? v : 'var(--tenant-primary-color)';
-  }
-
-  onPrimaryPicker(event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
-    this.brandForm.controls.primaryColor.setValue(value);
-  }
-
-  onSecondaryPicker(event: Event): void {
-    const value = (event.target as HTMLInputElement).value;
-    this.brandForm.controls.secondaryColor.setValue(value);
   }
 
   ngOnInit(): void {
@@ -405,9 +394,17 @@ export class WorkspaceSettingsComponent implements OnInit {
     this.sm.set(this.smDraft);
   }
 
-  onResolutionMinutes(code: string, event: Event): void {
+  formatDuration(minutes: number): string {
+    return formatSlaDuration(minutes);
+  }
+
+  resolutionParts(code: string) {
+    return minutesToParts(this.policyMinutes(code, 'resolution'));
+  }
+
+  private setResolutionMinutes(code: string, minutes: number): void {
     if (!this.smDraft?.slaPolicies) return;
-    const value = Number((event.target as HTMLInputElement).value);
+    const value = Math.max(1, Math.round(minutes) || 1);
     this.smDraft = {
       ...this.smDraft,
       slaPolicies: this.smDraft.slaPolicies.map((p) =>
@@ -415,6 +412,18 @@ export class WorkspaceSettingsComponent implements OnInit {
       )
     };
     this.sm.set(this.smDraft);
+  }
+
+  onResolutionValue(code: string, event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    const unit = this.resolutionParts(code).unit;
+    this.setResolutionMinutes(code, convertSlaDuration(value, unit));
+  }
+
+  onResolutionUnit(code: string, event: Event): void {
+    const unit = (event.target as HTMLSelectElement).value as SlaDurationUnit;
+    const value = this.resolutionParts(code).value;
+    this.setResolutionMinutes(code, convertSlaDuration(value, unit));
   }
 
   onBhTimezone(event: Event): void {

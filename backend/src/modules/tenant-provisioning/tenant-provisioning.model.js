@@ -16,8 +16,9 @@ const stepSchema = new mongoose.Schema(
       type: Date,
       default: null
     },
+    /** String (legacy) or structured { message, code, technicalDetails, failedAt, retryable } */
     error: {
-      type: String,
+      type: mongoose.Schema.Types.Mixed,
       default: null
     }
   },

@@ -323,7 +323,7 @@ describe("Phase 9 workspace setup", () => {
     expect(elvaLogin.status).toBe(200);
   });
 
-  test("oversized logo rejected; skip branding step; public branding endpoint", async () => {
+  test("oversized logo rejected; branding skip disabled; public branding endpoint", async () => {
     const { admin } = await createTenantWorkspace({ slug: "skip-co", name: "Skip Co" });
     const token = await loginAgent(app, admin.email, "Admin@12345", { tenantSlug: "skip-co" });
 
@@ -337,8 +337,7 @@ describe("Phase 9 workspace setup", () => {
     const skip = await request(app)
       .post("/api/workspace/setup/skip/branding")
       .set(tenantHeaders(token, "skip-co"));
-    expect(skip.status).toBe(200);
-    expect(skip.body.data.steps.branding).toBe(true);
+    expect(skip.status).toBe(400);
 
     const pub = await request(app)
       .get("/api/workspace/branding/public")

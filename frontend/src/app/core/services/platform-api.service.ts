@@ -29,7 +29,17 @@ export interface PlatformTenant {
 export interface ProvisioningStep {
   status: string;
   completedAt?: string | null;
-  error?: string | null;
+  /** Legacy string or structured failure details */
+  error?:
+    | string
+    | null
+    | {
+        message?: string;
+        code?: string;
+        technicalDetails?: string | null;
+        failedAt?: string | null;
+        retryable?: boolean;
+      };
 }
 
 export interface PlatformProvisioning {

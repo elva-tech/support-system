@@ -23,7 +23,7 @@ import { environment } from '../../../../environments/environment';
         [subtitle]="(terms.singular() + ' Sign In')"
         [productName]="branding.branding().productName"
         [tagline]="branding.branding().supportDisplayName"
-        [logoUrl]="branding.branding().logoUrl || '/images/elva-logo.png'"
+        [logoUrl]="branding.branding().logoUrl || ''"
         [showTitle]="true"
       />
 
@@ -89,10 +89,6 @@ import { environment } from '../../../../environments/environment';
       <app-elva-footer
         variant="dark"
         [companyName]="branding.branding().organizationName || branding.branding().productName"
-        websiteLabel=""
-        websiteUrl=""
-        supportEmail=""
-        [showTicketEmailHint]="false"
       />
     </div>
   `

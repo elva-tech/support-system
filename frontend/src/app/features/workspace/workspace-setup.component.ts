@@ -10,12 +10,13 @@ import {
 } from '../../core/services/workspace-api.service';
 import { BrandingService } from '../../core/portal/branding.service';
 import { formatApiError } from '../../shared/utils/api-error.util';
+import { BrandColorPickerComponent } from '../../shared/components/brand-color-picker/brand-color-picker.component';
 
 type SetupStepId =
   | 'organization'
   | 'branding'
-  | 'team'
   | 'application'
+  | 'team'
   | 'users'
   | 'client'
   | 'done';
@@ -29,7 +30,7 @@ interface ChecklistItem {
 @Component({
   selector: 'app-workspace-setup',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterLink],
+  imports: [CommonModule, ReactiveFormsModule, RouterLink, BrandColorPickerComponent],
   template: `
     <div class="mx-auto max-w-3xl space-y-6">
       <div>
@@ -88,10 +89,14 @@ interface ChecklistItem {
 
       @if (step() === 'organization') {
         <form class="card space-y-4" [formGroup]="orgForm" (ngSubmit)="saveOrganization()">
-          <h2 class="text-lg font-semibold text-slate-900">1. Organization details</h2>
+          <h2 class="text-lg font-semibold text-slate-900">1. Business details</h2>
           <div>
             <label class="form-label">Organization display name</label>
             <input class="form-input" formControlName="displayName" />
+          </div>
+          <div>
+            <label class="form-label">Legal / business name</label>
+            <input class="form-input" formControlName="legalName" />
           </div>
           <div>
             <label class="form-label">Support contact email</label>
@@ -113,9 +118,13 @@ interface ChecklistItem {
               <input class="form-input" formControlName="website" placeholder="https://" />
             </div>
             <div>
-              <label class="form-label">Timezone</label>
-              <input class="form-input" formControlName="timezone" placeholder="Asia/Kolkata" />
+              <label class="form-label">Country</label>
+              <input class="form-input" formControlName="country" />
             </div>
+          </div>
+          <div>
+            <label class="form-label">Timezone</label>
+            <input class="form-input" formControlName="timezone" placeholder="Asia/Kolkata" />
           </div>
           <div class="flex flex-wrap gap-3">
             <button type="submit" class="btn-primary" [disabled]="orgForm.invalid || saving()">
@@ -128,43 +137,69 @@ interface ChecklistItem {
 
       @if (step() === 'branding') {
         <form class="card space-y-4" [formGroup]="brandForm" (ngSubmit)="saveBranding()">
-          <h2 class="text-lg font-semibold text-slate-900">2. Branding</h2>
+          <h2 class="text-lg font-semibold text-slate-900">2. Branding details</h2>
           <p class="text-sm text-slate-500">
-            Support display name appears in outbound emails as
-            <em>Your Name &lt;support@elvatech.in&gt;</em>.
+            Support display name appears in outbound emails. Choose brand colors with the palette
+            picker.
           </p>
           <div>
             <label class="form-label">Support display name</label>
             <input class="form-input" formControlName="supportDisplayName" placeholder="ABC Support" />
           </div>
-          <div>
-            <label class="form-label">Primary color (optional)</label>
-            <input class="form-input" formControlName="primaryColor" placeholder="#1a73e8" />
-          </div>
+          <app-brand-color-picker label="Primary color" formControlName="primaryColor" />
+          <app-brand-color-picker label="Secondary color (optional)" formControlName="secondaryColor" />
           <div>
             <label class="form-label">Logo (PNG, JPEG, or WebP, max 2MB)</label>
             <input type="file" class="form-input" accept=".png,.jpg,.jpeg,.webp" (change)="onLogoSelected($event)" />
+          </div>
+          <div
+            class="rounded-lg border border-slate-200 p-4"
+            [style.border-left-color]="brandForm.controls.primaryColor.value || '#13294b'"
+            [style.border-left-width]="'4px'"
+          >
+            <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Preview</p>
+            <p
+              class="mt-1 text-sm font-medium"
+              [style.color]="brandForm.controls.primaryColor.value || 'var(--tenant-primary-color)'"
+            >
+              {{ brandForm.controls.supportDisplayName.value || 'Support display name' }}
+            </p>
           </div>
           <div class="flex flex-wrap gap-3">
             <button type="submit" class="btn-primary" [disabled]="saving()">
               {{ saving() ? 'Saving...' : 'Save & continue' }}
             </button>
-            <button type="button" class="btn-secondary" (click)="skip('branding')" [disabled]="saving()">
-              Skip for now
-            </button>
           </div>
         </form>
       }
 
+      @if (step() === 'application') {
+        <div class="card space-y-4">
+          <h2 class="text-lg font-semibold text-slate-900">3. Create application</h2>
+          <p class="text-sm text-slate-600">
+            Applications represent products your clients get support for (e.g. Website, Mobile App).
+          </p>
+          @if (setup()?.steps?.application) {
+            <p class="text-sm text-elva-800">Application step complete.</p>
+            <button type="button" class="btn-primary" (click)="goTo('team')">Continue</button>
+          } @else {
+            <a routerLink="/applications" class="btn-primary inline-flex">Open Applications</a>
+            <button type="button" class="btn-secondary" (click)="reload()">
+              I've created an application — refresh
+            </button>
+          }
+        </div>
+      }
+
       @if (step() === 'team') {
         <div class="card space-y-4">
-          <h2 class="text-lg font-semibold text-slate-900">3. Create a team</h2>
+          <h2 class="text-lg font-semibold text-slate-900">4. Create team</h2>
           <p class="text-sm text-slate-600">
             Support tickets are routed to teams. Create your first support team, then return here.
           </p>
           @if (setup()?.steps?.team) {
             <p class="text-sm text-elva-800">Team step complete.</p>
-            <button type="button" class="btn-primary" (click)="goTo('application')">Continue</button>
+            <button type="button" class="btn-primary" (click)="goTo('users')">Continue</button>
           } @else {
             <a routerLink="/teams" class="btn-primary inline-flex">Open Teams</a>
             <button type="button" class="btn-secondary" (click)="reload()">I've created a team — refresh</button>
@@ -172,30 +207,15 @@ interface ChecklistItem {
         </div>
       }
 
-      @if (step() === 'application') {
-        <div class="card space-y-4">
-          <h2 class="text-lg font-semibold text-slate-900">4. Create an application / product</h2>
-          <p class="text-sm text-slate-600">
-            Applications represent products your clients get support for (e.g. Website, Mobile App).
-          </p>
-          @if (setup()?.steps?.application) {
-            <p class="text-sm text-elva-800">Application step complete.</p>
-            <button type="button" class="btn-primary" (click)="goTo('users')">Continue</button>
-          } @else {
-            <a routerLink="/applications" class="btn-primary inline-flex">Open Applications</a>
-            <button type="button" class="btn-secondary" (click)="reload()">I've created an application — refresh</button>
-          }
-        </div>
-      }
-
       @if (step() === 'users') {
         <div class="card space-y-4">
-          <h2 class="text-lg font-semibold text-slate-900">5. Add team members</h2>
+          <h2 class="text-lg font-semibold text-slate-900">5. Invite teammates / agents</h2>
           <p class="text-sm text-slate-600">
-            Invite agents and team leads so they can work tickets. You can add them later.
+            Invite workspace admins, team admins, and agents so they can work tickets. You can add them
+            later.
           </p>
           @if (setup()?.steps?.users) {
-            <p class="text-sm text-elva-800">Users step complete.</p>
+            <p class="text-sm text-elva-800">Teammates step complete.</p>
             <button type="button" class="btn-primary" (click)="goTo('client')">Continue</button>
           } @else {
             <a routerLink="/users" class="btn-primary inline-flex">Open Users</a>
@@ -209,12 +229,12 @@ interface ChecklistItem {
 
       @if (step() === 'client') {
         <div class="card space-y-4">
-          <h2 class="text-lg font-semibold text-slate-900">6. Add your first client (optional)</h2>
+          <h2 class="text-lg font-semibold text-slate-900">6. Add clients</h2>
           <p class="text-sm text-slate-600">
             Register a client email so they can sign in with OTP and create tickets.
           </p>
           @if (setup()?.steps?.client) {
-            <p class="text-sm text-elva-800">Client step complete.</p>
+            <p class="text-sm text-elva-800">Clients step complete.</p>
             <button type="button" class="btn-primary" (click)="goTo('done')">Finish</button>
           } @else {
             <a routerLink="/merchants" class="btn-primary inline-flex">Open Clients</a>
@@ -253,16 +273,17 @@ export class WorkspaceSetupComponent implements OnInit {
   private logoFile: File | null = null;
 
   readonly checklist: ChecklistItem[] = [
-    { id: 'organization', label: 'Organization details' },
-    { id: 'branding', label: 'Branding', optional: true },
-    { id: 'team', label: 'Create a team' },
-    { id: 'application', label: 'Create an application' },
-    { id: 'users', label: 'Add team members', optional: true },
-    { id: 'client', label: 'Add first client', optional: true }
+    { id: 'organization', label: 'Business details' },
+    { id: 'branding', label: 'Branding details' },
+    { id: 'application', label: 'Create application' },
+    { id: 'team', label: 'Create team' },
+    { id: 'users', label: 'Invite teammates', optional: true },
+    { id: 'client', label: 'Add clients', optional: true }
   ];
 
   readonly orgForm = this.fb.nonNullable.group({
     displayName: ['', [Validators.required, Validators.maxLength(200)]],
+    legalName: [''],
     supportEmail: ['', [Validators.required, Validators.email]],
     primaryContactName: [''],
     phone: [''],
@@ -273,7 +294,8 @@ export class WorkspaceSetupComponent implements OnInit {
 
   readonly brandForm = this.fb.nonNullable.group({
     supportDisplayName: ['', [Validators.maxLength(120)]],
-    primaryColor: ['']
+    primaryColor: [''],
+    secondaryColor: ['']
   });
 
   ngOnInit(): void {
@@ -295,6 +317,7 @@ export class WorkspaceSetupComponent implements OnInit {
         const org = res.data.organization || {};
         this.orgForm.patchValue({
           displayName: org.displayName || org.name || res.data.tenant.name || '',
+          legalName: org.legalName || '',
           supportEmail: org.supportEmail || '',
           primaryContactName: org.primaryContactName || '',
           phone: org.phone || '',
@@ -304,7 +327,8 @@ export class WorkspaceSetupComponent implements OnInit {
         });
         this.brandForm.patchValue({
           supportDisplayName: res.data.branding?.supportDisplayName || '',
-          primaryColor: res.data.branding?.primaryColor || ''
+          primaryColor: res.data.branding?.primaryColor || '',
+          secondaryColor: res.data.branding?.secondaryColor || ''
         });
         this.step.set(this.nextIncompleteStep(res.data.setup));
       },
@@ -360,7 +384,8 @@ export class WorkspaceSetupComponent implements OnInit {
     this.api
       .updateBranding({
         supportDisplayName: payload.supportDisplayName,
-        primaryColor: payload.primaryColor || null
+        primaryColor: payload.primaryColor || null,
+        secondaryColor: payload.secondaryColor || null
       })
       .subscribe({
         next: (res) => {
@@ -392,7 +417,7 @@ export class WorkspaceSetupComponent implements OnInit {
       });
   }
 
-  skip(step: 'branding' | 'users' | 'client'): void {
+  skip(step: 'users' | 'client'): void {
     this.saving.set(true);
     this.api.skipStep(step).subscribe({
       next: (res) => {

@@ -7,6 +7,7 @@
   --tenant-secondary-color: #4a6789;
   --tenant-primary-hover: #0f2139;
   --tenant-primary-light: #e8eef5;
+  --tenant-primary-contrast: #ffffff;
 }
 
 @layer components {
@@ -55,9 +56,15 @@
   .badge {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
   }
+}
 
-  .nav-active {
-    background-color: var(--tenant-primary-color);
-    color: #ffffff;
-  }
+/* Outside @layer so active nav beats Tailwind text-* utilities on the same element */
+.nav-active {
+  background-color: var(--tenant-primary-color) !important;
+  color: var(--tenant-primary-contrast, #ffffff) !important;
+}
+
+.nav-active:hover {
+  background-color: var(--tenant-primary-hover) !important;
+  color: var(--tenant-primary-contrast, #ffffff) !important;
 }

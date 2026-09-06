@@ -26,13 +26,14 @@ interface NavItem {
         [subtitle]="headerSubtitle"
         [productName]="branding.branding().productName"
         [tagline]="branding.branding().supportDisplayName"
-        [logoUrl]="branding.branding().logoUrl || '/images/elva-logo.png'"
+        [logoUrl]="branding.branding().logoUrl || ''"
         [showActionsOnMobile]="true"
         [compactActions]="true"
       >
         <button
           type="button"
-          class="shrink-0 rounded-lg border border-white/20 px-3 py-1.5 text-xs text-white transition hover:bg-white/10 sm:text-sm"
+          class="shrink-0 rounded-lg border border-white/20 px-3 py-1.5 text-xs transition hover:bg-white/10 sm:text-sm"
+          [style.color]="'var(--tenant-primary-contrast, #ffffff)'"
           (click)="logout()"
         >
           Sign out
@@ -46,7 +47,7 @@ interface NavItem {
               <a
                 [routerLink]="item.path"
                 routerLinkActive="nav-active"
-                class="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-[var(--tenant-primary-light)] hover:text-[var(--tenant-primary-color)] lg:block"
+                class="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-[var(--tenant-primary-light)] hover:text-[var(--tenant-primary-color)] lg:block"
               >
                 {{ item.label }}
               </a>
@@ -66,10 +67,6 @@ interface NavItem {
           <app-elva-footer
             variant="light"
             [companyName]="branding.branding().organizationName || branding.branding().productName"
-            websiteLabel=""
-            websiteUrl=""
-            supportEmail=""
-            [showTicketEmailHint]="false"
           />
         </div>
       </div>

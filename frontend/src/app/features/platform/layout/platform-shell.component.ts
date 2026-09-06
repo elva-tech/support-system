@@ -54,7 +54,7 @@ import { ElvaHeaderComponent } from '../../../shared/components/elva-header/elva
           <main class="flex-1 p-4 sm:p-6 lg:p-8">
             <router-outlet />
           </main>
-          <app-elva-footer variant="light" />
+          <app-elva-footer variant="light" companyName="ELVA Support" />
         </div>
       </div>
     </div>

@@ -221,11 +221,21 @@ import { BrandingService } from '../../core/portal/branding.service';
 
       <footer class="border-t border-white/10 px-4 py-10 sm:px-6">
         <div
-          class="mx-auto flex max-w-6xl flex-col gap-4 text-center text-sm text-white/55 md:flex-row md:items-center md:justify-between md:text-left"
+          class="mx-auto flex max-w-6xl flex-col gap-4 text-center text-sm text-white/55 md:flex-row md:items-start md:justify-between md:text-left"
         >
-          <div>
-            <p class="font-medium text-white/80">ELVA Support</p>
-            <p class="mt-1">&copy; {{ year }} ELVA Tech. All rights reserved.</p>
+          <div class="space-y-1">
+            <p>&copy; {{ year }} ELVA Support. All rights reserved.</p>
+            <p>
+              An ELVA Tech Product ·
+              <a
+                href="https://elvatech.in"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="font-medium underline decoration-white/40 underline-offset-2 transition hover:text-white"
+              >
+                elvatech.in
+              </a>
+            </p>
           </div>
           <div class="space-y-1 md:text-right">
             <p>

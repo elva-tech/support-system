@@ -59,7 +59,7 @@ import { formatApiError } from '../../../shared/utils/api-error.util';
         </div>
       </main>
 
-      <app-elva-footer variant="dark" />
+      <app-elva-footer variant="dark" companyName="ELVA Support" />
     </div>
   `
 })

@@ -196,7 +196,7 @@ export class WorkspaceApiService {
     );
   }
 
-  skipStep(step: 'branding' | 'users' | 'client'): Observable<ApiResponse<WorkspaceSetup>> {
+  skipStep(step: 'users' | 'client'): Observable<ApiResponse<WorkspaceSetup>> {
     return this.http.post<ApiResponse<WorkspaceSetup>>(`${this.base}/setup/skip/${step}`, {});
   }
 

@@ -30,7 +30,7 @@ const tenantAdminEmailExists = () =>
   provisioningError(
     409,
     PROVISIONING_ERROR_CODES.TENANT_ADMIN_EMAIL_EXISTS,
-    "A user with this email already exists in the tenant"
+    "An administrator with this email already exists. Use another email address, or remove the conflicting user first."
   );
 
 module.exports = {

@@ -176,7 +176,8 @@ const organizationIsComplete = (org = {}) => {
 
 const brandingIsConfigured = (branding = {}) => {
   const display = String(branding.supportDisplayName || "").trim();
-  return Boolean(display) || Boolean(branding.logoFileId);
+  const primary = String(branding.primaryColor || "").trim();
+  return Boolean(display) || Boolean(branding.logoFileId) || Boolean(primary);
 };
 
 /**
@@ -497,7 +498,7 @@ const updateSupportSettings = async (tenantId, payload = {}, { actor } = {}) => 
 };
 
 const skipSetupStep = async (tenantId, step, { actor } = {}) => {
-  const skippable = ["branding", "users", "client"];
+  const skippable = ["users", "client"];
   if (!skippable.includes(step)) {
     throw new ApiError(400, "This setup step cannot be skipped");
   }

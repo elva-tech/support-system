@@ -25,7 +25,7 @@ type MerchantTab = {
         subtitle="Customer Portal"
         [productName]="branding.branding().productName"
         [tagline]="branding.branding().supportDisplayName"
-        [logoUrl]="branding.branding().logoUrl || '/images/elva-logo.png'"
+        [logoUrl]="branding.branding().logoUrl || ''"
         [showActionsOnMobile]="true"
       >
         <button
@@ -60,10 +60,6 @@ type MerchantTab = {
       <app-elva-footer
         variant="light"
         [companyName]="branding.branding().organizationName || branding.branding().productName"
-        websiteLabel=""
-        websiteUrl=""
-        supportEmail=""
-        [showTicketEmailHint]="false"
       />
     </div>
   `,

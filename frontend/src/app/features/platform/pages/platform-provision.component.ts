@@ -14,6 +14,10 @@ import {
 } from '../../../core/portal/portal-host.util';
 import { environment } from '../../../../environments/environment';
 import { formatApiError } from '../../../shared/utils/api-error.util';
+import {
+  normalizeStepError,
+  suggestedActionForCode
+} from '../../../shared/utils/provisioning-error.util';
 
 @Component({
   selector: 'app-platform-provision',
@@ -46,6 +50,25 @@ import { formatApiError } from '../../../shared/utils/api-error.util';
             {{ r.status === 'FAILED' ? 'Provisioning failed' : 'Provisioning completed' }}
           </h2>
           <p class="mt-1 text-sm text-slate-600">Overall status: <strong>{{ r.status }}</strong></p>
+
+          @if (r.status === 'FAILED' && primaryFailure(r); as fail) {
+            <div class="mt-4 rounded-lg border border-red-300 bg-white/70 px-4 py-3 text-sm text-red-900">
+              <p class="font-semibold">{{ fail.stepLabel }} failed</p>
+              <p class="mt-2"><span class="font-medium">Reason:</span> {{ fail.message }}</p>
+              @if (fail.code) {
+                <p class="mt-1 text-xs text-red-700">
+                  <span class="font-medium">Technical details:</span> {{ fail.code }}
+                  @if (fail.technicalDetails && fail.technicalDetails !== fail.code) {
+                    · {{ fail.technicalDetails }}
+                  }
+                </p>
+              }
+              <p class="mt-2 text-slate-700">
+                <span class="font-medium">Suggested action:</span> {{ fail.suggestion }}
+              </p>
+            </div>
+          }
+
           @if (emailFailed(r)) {
             <p class="mt-2 text-sm text-amber-800">
               Core onboarding succeeded, but the welcome email did not send. You can resend from provisioning status.
@@ -53,9 +76,14 @@ import { formatApiError } from '../../../shared/utils/api-error.util';
           }
           <ul class="mt-4 space-y-2 text-sm">
             @for (step of stepEntries(r); track step.key) {
-              <li class="flex justify-between gap-3">
-                <span>{{ step.label }}</span>
-                <span class="font-medium">{{ step.status }}</span>
+              <li class="rounded-lg bg-white/50 px-3 py-2">
+                <div class="flex justify-between gap-3">
+                  <span>{{ step.label }}</span>
+                  <span class="font-medium">{{ step.status }}</span>
+                </div>
+                @if (step.errorView; as ev) {
+                  <p class="mt-1 text-xs text-red-700">{{ ev.message }}</p>
+                }
               </li>
             }
           </ul>
@@ -66,7 +94,9 @@ import { formatApiError } from '../../../shared/utils/api-error.util';
             </a>
           </p>
           <div class="mt-4 flex flex-wrap gap-3">
-            <a [routerLink]="['/provisionings', r.id]" class="btn-primary">View provisioning</a>
+            <a [routerLink]="['/provisionings', r.id]" class="btn-primary">
+              {{ r.status === 'FAILED' ? 'View details / Retry' : 'View provisioning' }}
+            </a>
             <a routerLink="/tenants" class="btn-secondary">Businesses</a>
             <button type="button" class="btn-secondary" (click)="resetForm()">Provision another</button>
           </div>
@@ -168,8 +198,7 @@ export class PlatformProvisionComponent {
 
   previewWorkspaceUrl(): string {
     const slug = (this.form.controls.slug.value || 'slug').trim().toLowerCase() || 'slug';
-    const protocol = environment.production ? 'https' : 'https';
-    return `${protocol}://${slug}.${environment.tenantBaseDomain}`;
+    return `https://${slug}.${environment.tenantBaseDomain}`;
   }
 
   slugError(): string {
@@ -231,7 +260,12 @@ export class PlatformProvisionComponent {
     return r.steps?.welcomeEmail?.status === 'FAILED';
   }
 
-  stepEntries(r: PlatformProvisioning): { key: string; label: string; status: string }[] {
+  stepEntries(r: PlatformProvisioning): {
+    key: string;
+    label: string;
+    status: string;
+    errorView: ReturnType<typeof normalizeStepError>;
+  }[] {
     const map: Record<string, string> = {
       tenantCreated: 'Tenant created',
       workspaceInitialized: 'Workspace initialized',
@@ -239,11 +273,43 @@ export class PlatformProvisionComponent {
       invitationCreated: 'Invitation created',
       welcomeEmail: 'Welcome email'
     };
-    return Object.entries(map).map(([key, label]) => ({
-      key,
-      label,
-      status: (r.steps as Record<string, { status?: string }>)?.[key]?.status || 'PENDING'
-    }));
+    return Object.entries(map).map(([key, label]) => {
+      const step = (r.steps as Record<string, { status?: string; error?: unknown }>)?.[key];
+      return {
+        key,
+        label,
+        status: step?.status || 'PENDING',
+        errorView: normalizeStepError(step?.error)
+      };
+    });
+  }
+
+  primaryFailure(r: PlatformProvisioning): {
+    stepLabel: string;
+    message: string;
+    code: string | null;
+    technicalDetails: string | null;
+    suggestion: string;
+  } | null {
+    const labels: Record<string, string> = {
+      tenantCreated: 'Tenant creation',
+      workspaceInitialized: 'Workspace initialization',
+      adminCreated: 'Admin creation',
+      invitationCreated: 'Invitation creation',
+      welcomeEmail: 'Welcome email'
+    };
+    const failedStep = this.stepEntries(r).find((s) => s.status === 'FAILED' && s.errorView);
+    const fromStep = failedStep?.errorView;
+    const message = fromStep?.message || r.failure?.message || 'An unexpected error occurred.';
+    const code = fromStep?.code || r.failure?.code || null;
+    const stepKey = failedStep?.key || r.failure?.atStep || '';
+    return {
+      stepLabel: labels[stepKey] || stepKey || 'Provisioning step',
+      message,
+      code,
+      technicalDetails: fromStep?.technicalDetails || null,
+      suggestion: suggestedActionForCode(code, message)
+    };
   }
 
   resetForm(): void {

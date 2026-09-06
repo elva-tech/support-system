@@ -17,41 +17,14 @@ import { ElvaHeaderComponent } from '../../shared/components/elva-header/elva-he
   imports: [RouterLink, ElvaHeaderComponent, ElvaFooterComponent],
   template: `
     @if (branding.workspaceUnavailable()) {
-      <div class="flex min-h-screen flex-col bg-slate-100">
-        <app-elva-header
-          subtitle="Workspace not found"
-          tagline=""
-          productName="ELVA Support"
-          logoUrl="/images/elva-logo.png"
-        />
-        <main class="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-4 py-12">
-          <div class="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-            <h1 class="text-xl font-bold text-slate-900">Workspace not found</h1>
-            <p class="mt-3 text-sm text-slate-600">
-              This support portal does not exist or is no longer available.
-            </p>
-            <p class="mt-2 text-sm text-slate-500">
-              Hostname <strong>{{ portal.hostname }}</strong>
-              @if (portal.tenantSlug) {
-                (workspace <code class="rounded bg-slate-100 px-1">{{ portal.tenantSlug }}</code>)
-              }
-              could not be resolved.
-            </p>
-            <a
-              [href]="portal.apexUrl"
-              class="btn-primary mt-6 inline-flex"
-            >
-              Go to {{ apexHost }}
-            </a>
-          </div>
-        </main>
-        <app-elva-footer
-          variant="light"
-          companyName="ELVA Support"
-          websiteLabel="elvasupport.in"
-          websiteUrl="https://elvasupport.in"
-          supportEmail="support@elvatech.in"
-        />
+      <div class="flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4">
+        <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <h1 class="text-xl font-bold text-slate-900">Workspace not found</h1>
+          <p class="mt-3 text-sm text-slate-600">
+            This workspace may no longer exist or the address may be incorrect.
+          </p>
+          <a [href]="portal.apexUrl" class="btn-primary mt-6 inline-flex">Back to ELVA Support</a>
+        </div>
       </div>
     } @else {
       <div
@@ -64,7 +37,7 @@ import { ElvaHeaderComponent } from '../../shared/components/elva-header/elva-he
           [subtitle]="headerSubtitle()"
           [tagline]="branding.branding().loginSubtitle || ''"
           [productName]="branding.branding().productName"
-          [logoUrl]="branding.branding().logoUrl || '/images/elva-logo.png'"
+          [logoUrl]="branding.branding().logoUrl || ''"
         >
           <a routerLink="/auth/login" class="text-sm text-white/80 transition hover:text-white">
             Staff portal
@@ -141,10 +114,6 @@ import { ElvaHeaderComponent } from '../../shared/components/elva-header/elva-he
         <app-elva-footer
           variant="dark"
           [companyName]="branding.branding().organizationName || branding.branding().productName"
-          [supportEmail]="''"
-          [showTicketEmailHint]="false"
-          websiteLabel=""
-          websiteUrl=""
         />
       </div>
     }

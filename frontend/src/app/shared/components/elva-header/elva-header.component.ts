@@ -1,5 +1,6 @@
 import { Component, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { NEUTRAL_WORKSPACE_ICON } from '../../../core/portal/branding.types';
 
 @Component({
   selector: 'app-elva-header',
@@ -13,7 +14,7 @@ import { RouterLink } from '@angular/router';
       <div class="mx-auto flex w-full max-w-6xl items-center justify-between gap-2 sm:gap-4">
         <a routerLink="/" class="inline-flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
           <img
-            [src]="logoUrl()"
+            [src]="logoUrl() || neutralIcon"
             [alt]="productName()"
             class="h-12 w-12 shrink-0 rounded-md object-cover sm:h-14 sm:w-14"
           />
@@ -52,10 +53,11 @@ import { RouterLink } from '@angular/router';
 export class ElvaHeaderComponent {
   readonly align = input<'left' | 'center'>('left');
   readonly subtitle = input('Customer Help Center');
-  readonly tagline = input('Elevating Value');
-  readonly productName = input('ELVA Support');
-  readonly logoUrl = input('/images/elva-logo.png');
+  readonly tagline = input('');
+  readonly productName = input('Support');
+  readonly logoUrl = input('');
   readonly showTitle = input(true);
   readonly compactActions = input(false);
   readonly showActionsOnMobile = input(false);
+  readonly neutralIcon = NEUTRAL_WORKSPACE_ICON;
 }

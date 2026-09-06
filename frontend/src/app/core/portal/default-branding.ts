@@ -105,8 +105,21 @@ export function resolveThemeColors(primaryColor?: string | null, secondaryColor?
     primary,
     secondary,
     primaryHover: darkenHex(primary, 0.12) || primary,
-    primaryLight: lightenHex(primary, 0.88) || '#e8eef5'
+    primaryLight: lightenHex(primary, 0.88) || '#e8eef5',
+    primaryContrast: contrastTextForBackground(primary)
   };
+}
+
+/** WCAG-ish relative luminance → black or white text on primary backgrounds */
+export function contrastTextForBackground(hex: string): string {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return '#ffffff';
+  const [r, g, b] = [rgb.r, rgb.g, rgb.b].map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance > 0.45 ? '#0f172a' : '#ffffff';
 }
 
 export function normalizeCustomerLabel(value: string | null | undefined): CustomerLabel {
