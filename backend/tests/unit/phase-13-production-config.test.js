@@ -27,6 +27,7 @@ describe("Phase 13 hostname resolution", () => {
   test("reserved infrastructure hosts are not tenants", () => {
     expect(parseTenantSlugFromHostname("api.elvasupport.in", base).kind).toBe("reserved");
     expect(parseTenantSlugFromHostname("www.elvasupport.in", base).kind).toBe("reserved");
+    expect(parseTenantSlugFromHostname("support.elvasupport.in", base).kind).toBe("central-support");
     expect(parseTenantSlugFromHostname("smtp.elvasupport.in", base).kind).toBe("reserved");
     expect(parseTenantSlugFromHostname("cdn.elvasupport.in", base).kind).toBe("reserved");
   });
@@ -79,8 +80,9 @@ describe("Phase 13 CORS origin matching", () => {
     requireHttpsForSubdomains: true
   };
 
-  test("allows platform and tenant origins", () => {
+  test("allows platform, central support, and tenant origins", () => {
     expect(isAllowedCorsOrigin("https://admin.elvasupport.in", opts)).toBe(true);
+    expect(isAllowedCorsOrigin("https://support.elvasupport.in", opts)).toBe(true);
     expect(isAllowedCorsOrigin("https://elva.elvasupport.in", opts)).toBe(true);
     expect(isAllowedCorsOrigin("https://acme.elvasupport.in", opts)).toBe(true);
   });

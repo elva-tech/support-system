@@ -4,6 +4,7 @@
  * Allows:
  * - Exact entries from CORS_ORIGIN / CORS_ALLOWED_ORIGINS
  * - https://admin.{baseDomain} (platform)
+ * - https://support.{baseDomain} (central support)
  * - https://{single-label-slug}.{baseDomain} when tenant subdomains enabled
  *
  * Rejects:
@@ -106,8 +107,8 @@ const matchesTenantSubdomainOrigin = (parsed, baseDomain, { allowReserved = fals
   }
 
   if (!allowReserved && RESERVED_TENANT_SLUGS.includes(subdomain)) {
-    // Platform admin is allowed separately
-    if (subdomain === "admin") {
+    // Platform admin + central support portals are allowed separately
+    if (subdomain === "admin" || subdomain === "support") {
       return true;
     }
     return false;

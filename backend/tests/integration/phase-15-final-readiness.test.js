@@ -40,9 +40,10 @@ const createWorkspace = async ({ slug, name }) => {
 };
 
 describe("Phase 15 final readiness", () => {
-  test("hostname resolution: reserved / platform / tenant / invalid", () => {
+  test("hostname resolution: reserved / platform / central-support / tenant / invalid", () => {
     const base = "elvasupport.in";
     expect(parseTenantSlugFromHostname(`admin.${base}`, base).kind).toBe("platform");
+    expect(parseTenantSlugFromHostname(`support.${base}`, base).kind).toBe("central-support");
     expect(parseTenantSlugFromHostname(`api.${base}`, base).kind).toBe("reserved");
     expect(parseTenantSlugFromHostname(`www.${base}`, base).kind).toBe("reserved");
     expect(parseTenantSlugFromHostname(`acme.${base}`, base)).toEqual({

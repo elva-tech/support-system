@@ -16,6 +16,7 @@ describe("tenant-host.util", () => {
 
   test("reserved / platform hosts are not tenants", () => {
     expect(parseTenantSlugFromHostname("admin.elvasupport.in", base).kind).toBe("platform");
+    expect(parseTenantSlugFromHostname("support.elvasupport.in", base).kind).toBe("central-support");
     expect(parseTenantSlugFromHostname("www.elvasupport.in", base).kind).toBe("reserved");
     expect(parseTenantSlugFromHostname("api.elvasupport.in", base).kind).toBe("reserved");
   });

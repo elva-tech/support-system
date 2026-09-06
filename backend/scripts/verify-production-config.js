@@ -31,6 +31,10 @@ assert(
   parseTenantSlugFromHostname(`admin.${baseDomain}`, baseDomain).kind === "platform"
 );
 assert(
+  "support is central-support (not tenant)",
+  parseTenantSlugFromHostname(`support.${baseDomain}`, baseDomain).kind === "central-support"
+);
+assert(
   "elva is tenant",
   parseTenantSlugFromHostname(`elva.${baseDomain}`, baseDomain).kind === "tenant"
 );
@@ -79,6 +83,10 @@ const corsOpts = {
 assert(
   "admin origin allowed",
   isAllowedCorsOrigin(`https://admin.${baseDomain}`, corsOpts) === true
+);
+assert(
+  "central support origin allowed",
+  isAllowedCorsOrigin(`https://support.${baseDomain}`, corsOpts) === true
 );
 assert(
   "tenant origin allowed",

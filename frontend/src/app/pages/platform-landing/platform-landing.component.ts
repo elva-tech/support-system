@@ -1,5 +1,6 @@
 import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { environment } from '../../../environments/environment';
 import { PortalDocumentTitleService } from '../../core/portal/portal-document-title.service';
 import { BrandingService } from '../../core/portal/branding.service';
@@ -11,7 +12,7 @@ import { BrandingService } from '../../core/portal/branding.service';
 @Component({
   selector: 'app-platform-landing',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   styles: [
     `
       :host {
@@ -109,7 +110,7 @@ import { BrandingService } from '../../core/portal/branding.service';
             </p>
             <div class="fade-up-delay-2 mt-8 flex flex-col gap-3 sm:flex-row">
               <a
-                [href]="platformLoginUrl"
+                routerLink="/collaborate"
                 class="inline-flex items-center justify-center rounded-lg bg-white px-6 py-3 text-sm font-semibold text-[#13294b] shadow-lg transition hover:bg-slate-100"
               >
                 Get Started
@@ -208,13 +209,13 @@ import { BrandingService } from '../../core/portal/branding.service';
             Ready to simplify customer support?
           </h2>
           <p class="mt-4 text-white/65">
-            Sign in to the platform administration portal to provision and manage workspaces.
+            Talk to ELVA about a dedicated branded support workspace for your organization.
           </p>
           <a
-            [href]="platformLoginUrl"
+            routerLink="/collaborate"
             class="mt-8 inline-flex items-center justify-center rounded-lg bg-white px-6 py-3 text-sm font-semibold text-[#13294b] shadow-lg transition hover:bg-slate-100"
           >
-            Get Started
+            Collaborate with ELVA
           </a>
         </div>
       </section>

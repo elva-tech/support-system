@@ -15,6 +15,8 @@ export class PortalContextService {
     const config: PortalHostConfig = {
       tenantBaseDomain: environment.tenantBaseDomain,
       platformAdminHost: environment.platformAdminHost,
+      centralSupportHost:
+        environment.centralSupportHost || `support.${environment.tenantBaseDomain}`,
       developmentTenantSlug: environment.developmentTenantSlug,
       portalMode: environment.portalMode,
       production: environment.production
@@ -52,6 +54,10 @@ export class PortalContextService {
     return this.resolved.portalType === 'PLATFORM';
   }
 
+  get isCentralSupportPortal(): boolean {
+    return this.resolved.portalType === 'CENTRAL_SUPPORT';
+  }
+
   get isTenantPortal(): boolean {
     return this.resolved.portalType === 'TENANT';
   }
@@ -79,6 +85,22 @@ export class PortalContextService {
       return '/login';
     }
     return `https://${environment.platformAdminHost}/login`;
+  }
+
+  get centralSupportUrl(): string {
+    const host = environment.centralSupportHost || `support.${environment.tenantBaseDomain}`;
+    if (this.isLocalhost && !environment.production) {
+      return '/';
+    }
+    return `https://${host}`;
+  }
+
+  get centralSupportLoginUrl(): string {
+    if (this.isLocalhost && !environment.production) {
+      return '/login';
+    }
+    const host = environment.centralSupportHost || `support.${environment.tenantBaseDomain}`;
+    return `https://${host}/login`;
   }
 
   get apexUrl(): string {

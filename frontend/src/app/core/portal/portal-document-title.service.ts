@@ -6,7 +6,7 @@ import { BrandingService, ELVA_FAVICON_PATH, NEUTRAL_WORKSPACE_ICON } from './br
 import { PortalContextService } from './portal-context.service';
 
 /**
- * Centralized document title + favicon for apex / admin / tenant hosts.
+ * Centralized document title + favicon for apex / admin / central-support / tenant hosts.
  */
 @Injectable({ providedIn: 'root' })
 export class PortalDocumentTitleService {
@@ -32,7 +32,6 @@ export class PortalDocumentTitleService {
       });
   }
 
-  /** Optional page-level suffix, e.g. "Ticket Queue" */
   setPageSuffix(suffix: string): void {
     this.pageSuffix = String(suffix || '').trim();
     this.apply();
@@ -45,13 +44,24 @@ export class PortalDocumentTitleService {
 
   private applyTitle(): void {
     if (this.portal.isApexPortal) {
-      this.title.setTitle('ELVA Support — Customer Support Platform');
+      const suffix = this.pageSuffix;
+      this.title.setTitle(
+        suffix ? `ELVA Support — ${suffix}` : 'ELVA Support — Customer Support Platform'
+      );
       return;
     }
 
     if (this.portal.isPlatformPortal) {
       const suffix = this.pageSuffix || 'Platform Administration';
       this.title.setTitle(`ELVA Support — ${suffix}`);
+      return;
+    }
+
+    if (this.portal.isCentralSupportPortal) {
+      const suffix = this.pageSuffix || 'ELVA Central Support';
+      this.title.setTitle(
+        suffix === 'ELVA Central Support' ? suffix : `${suffix} | ELVA Central Support`
+      );
       return;
     }
 
@@ -104,6 +114,7 @@ export class PortalDocumentTitleService {
 
   private defaultTenantSuffix(): string {
     const url = this.router.url.split('?')[0];
+    if (url.startsWith('/support')) return 'Contact ELVA Support';
     if (url.startsWith('/merchant')) return 'Customer Support';
     if (url.startsWith('/auth/login')) return 'Sign In';
     if (url.startsWith('/settings') || url.startsWith('/setup')) return 'Workspace Settings';
@@ -116,12 +127,27 @@ export class PortalDocumentTitleService {
 
   private suffixFromUrl(url: string): string {
     const path = url.split('?')[0];
+    if (this.portal.isApexPortal) {
+      if (path.includes('/collaborate')) return 'Collaborate with ELVA';
+      return '';
+    }
     if (this.portal.isPlatformPortal) {
       if (path.includes('/provision')) return 'Provision Business';
       if (path.includes('/tenants')) return 'Businesses';
       if (path.includes('/audit')) return 'Audit';
       if (path.includes('/dashboard') || path === '/' || path === '') return 'Platform Administration';
       return 'Platform Administration';
+    }
+    if (this.portal.isCentralSupportPortal) {
+      if (path.includes('/my-tickets')) return 'My Tickets';
+      if (path.includes('/team-queue')) return 'Team Queue';
+      if (path.includes('/workload')) return 'Workload';
+      if (path.includes('/tickets')) return 'Support Queue';
+      if (path.includes('/teams')) return 'Teams';
+      if (path.includes('/users')) return 'Users';
+      if (path.includes('/settings')) return 'Settings';
+      if (path.includes('/dashboard') || path === '/' || path === '') return 'ELVA Central Support';
+      return 'ELVA Central Support';
     }
     return this.defaultTenantSuffix();
   }

@@ -41,6 +41,7 @@ const extractHostname = (req, { trustProxy = false } = {}) => {
  * kinds:
  * - tenant   → {slug}.baseDomain (operable tenant candidate)
  * - platform → admin.baseDomain
+ * - central-support → support.baseDomain
  * - reserved → other infrastructure subdomains (api, www, …)
  * - apex     → bare baseDomain
  * - local    → localhost / loopback
@@ -92,6 +93,10 @@ const parseTenantSlugFromHostname = (hostname, baseDomain) => {
 
   if (subdomain === "admin") {
     return { kind: "platform", slug: "admin" };
+  }
+
+  if (subdomain === "support") {
+    return { kind: "central-support", slug: "support" };
   }
 
   if (RESERVED_TENANT_SLUGS.includes(subdomain)) {

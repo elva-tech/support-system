@@ -3,7 +3,7 @@
  * Used on Vercel (and other CI) — local dev uses environment.ts via ng serve.
  *
  * Vercel: set API_URL=https://your-api.onrender.com/api
- * Optional: TENANT_BASE_DOMAIN, PLATFORM_ADMIN_HOST
+ * Optional: TENANT_BASE_DOMAIN, PLATFORM_ADMIN_HOST, CENTRAL_SUPPORT_HOST
  */
 const fs = require('fs');
 const path = require('path');
@@ -26,6 +26,9 @@ const tenantBaseDomain = (process.env.TENANT_BASE_DOMAIN || 'elvasupport.in').re
 const platformAdminHost = (
   process.env.PLATFORM_ADMIN_HOST || `admin.${process.env.TENANT_BASE_DOMAIN || 'elvasupport.in'}`
 ).replace(/'/g, "\\'");
+const centralSupportHost = (
+  process.env.CENTRAL_SUPPORT_HOST || `support.${process.env.TENANT_BASE_DOMAIN || 'elvasupport.in'}`
+).replace(/'/g, "\\'");
 
 const outPath = path.join(__dirname, '../src/environments/environment.prod.ts');
 const content = `export const environment = {
@@ -33,8 +36,9 @@ const content = `export const environment = {
   apiUrl: '${normalized.replace(/'/g, "\\'")}',
   tenantBaseDomain: '${tenantBaseDomain}',
   platformAdminHost: '${platformAdminHost}',
+  centralSupportHost: '${centralSupportHost}',
   developmentTenantSlug: '',
-  portalMode: 'auto' as 'auto' | 'platform' | 'tenant',
+  portalMode: 'auto' as 'auto' | 'platform' | 'central-support' | 'tenant' | 'landing',
   sendTenantSlugHeader: false
 };
 `;

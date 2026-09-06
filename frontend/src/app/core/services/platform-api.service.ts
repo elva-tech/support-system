@@ -339,4 +339,55 @@ export class PlatformApiService {
       { params }
     );
   }
+
+  listSupportTickets(
+    query: Record<string, string | number | boolean | undefined> = {}
+  ): Observable<
+    ApiResponse<{ items: import('./platform-support-api.service').PlatformSupportTicket[]; total: number }>
+  > {
+    let params = new HttpParams();
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params = params.set(key, String(value));
+      }
+    });
+    return this.http.get<
+      ApiResponse<{ items: import('./platform-support-api.service').PlatformSupportTicket[]; total: number }>
+    >(`${this.baseUrl}/support-tickets`, { params });
+  }
+
+  getSupportTicket(id: string) {
+    return this.http.get<ApiResponse<import('./platform-support-api.service').PlatformSupportTicket>>(
+      `${this.baseUrl}/support-tickets/${id}`
+    );
+  }
+
+  getSupportTimeline(id: string) {
+    return this.http.get<
+      ApiResponse<{
+        ticket: import('./platform-support-api.service').PlatformSupportTicket;
+        timeline: import('./platform-support-api.service').PlatformSupportTimelineItem[];
+      }>
+    >(`${this.baseUrl}/support-tickets/${id}/timeline`);
+  }
+
+  listSupportAssignees(): Observable<
+    ApiResponse<Array<{ id: string; name: string; email: string; role: string }>>
+  > {
+    return this.http.get<ApiResponse<Array<{ id: string; name: string; email: string; role: string }>>>(
+      `${this.baseUrl}/support-tickets/assignees`
+    );
+  }
+
+  assignSupportTicket(id: string, platformAdminId: string) {
+    return this.http.patch(`${this.baseUrl}/support-tickets/${id}/assign`, { platformAdminId });
+  }
+
+  updateSupportTicketStatus(id: string, status: string) {
+    return this.http.patch(`${this.baseUrl}/support-tickets/${id}/status`, { status });
+  }
+
+  replySupportTicket(id: string, message: string, internal = false) {
+    return this.http.post(`${this.baseUrl}/support-tickets/${id}/messages`, { message, internal });
+  }
 }

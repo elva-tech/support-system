@@ -3,13 +3,14 @@
  * No Angular DI — unit-testable and shared with Node verification script.
  *
  * Host contexts:
- * - APEX     → elvasupport.in / www.elvasupport.in (public SaaS landing)
- * - PLATFORM → admin.elvasupport.in
- * - TENANT   → {slug}.elvasupport.in
- * - UNKNOWN  → reserved/invalid/unrecognized hosts
+ * - APEX              → elvasupport.in / www.elvasupport.in (public SaaS landing)
+ * - PLATFORM          → admin.elvasupport.in
+ * - CENTRAL_SUPPORT   → support.elvasupport.in
+ * - TENANT            → {slug}.elvasupport.in
+ * - UNKNOWN           → reserved/invalid/unrecognized hosts
  */
 
-export type PortalType = 'APEX' | 'PLATFORM' | 'TENANT' | 'UNKNOWN';
+export type PortalType = 'APEX' | 'PLATFORM' | 'CENTRAL_SUPPORT' | 'TENANT' | 'UNKNOWN';
 
 export const RESERVED_TENANT_SLUGS = Object.freeze([
   'admin',
@@ -34,12 +35,16 @@ export const RESERVED_TENANT_SLUGS = Object.freeze([
 
 export const TENANT_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+export type PortalMode = 'auto' | 'platform' | 'central-support' | 'tenant' | 'landing';
+
 export interface PortalHostConfig {
   tenantBaseDomain: string;
   platformAdminHost: string;
+  /** Canonical central support hostname, e.g. support.elvasupport.in */
+  centralSupportHost: string;
   developmentTenantSlug: string;
-  /** auto | platform | tenant | landing — local override without DNS */
-  portalMode: 'auto' | 'platform' | 'tenant' | 'landing';
+  /** Local override without DNS */
+  portalMode: PortalMode;
   production: boolean;
 }
 
@@ -51,11 +56,8 @@ export interface PortalHostResult {
   reason: string;
 }
 
-/** Conceptual host context used across docs / callers */
-export type HostContextType = 'platform' | 'admin' | 'tenant' | 'unknown';
-
 export interface HostContext {
-  type: 'apex' | 'admin' | 'tenant' | 'unknown';
+  type: 'apex' | 'admin' | 'central-support' | 'tenant' | 'unknown';
   tenantSlug?: string;
   hostname: string;
   reason: string;
@@ -92,6 +94,11 @@ export const resolvePortalFromHost = (
   const hostname = normalizeHost(rawHost);
   const baseDomain = config.tenantBaseDomain.toLowerCase().trim();
   const platformHost = config.platformAdminHost.toLowerCase().trim();
+  const centralSupportHost = (
+    config.centralSupportHost || `support.${baseDomain}`
+  )
+    .toLowerCase()
+    .trim();
   const isLocalhost =
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||
@@ -115,6 +122,16 @@ export const resolvePortalFromHost = (
       hostname,
       isLocalhost,
       reason: 'platform-admin-host'
+    };
+  }
+
+  if (hostname === centralSupportHost || hostname === `support.${baseDomain}`) {
+    return {
+      portalType: 'CENTRAL_SUPPORT',
+      tenantSlug: null,
+      hostname,
+      isLocalhost,
+      reason: 'central-support-host'
     };
   }
 
@@ -147,6 +164,16 @@ export const resolvePortalFromHost = (
         hostname,
         isLocalhost: true,
         reason: 'local-portal-mode-platform'
+      };
+    }
+
+    if (config.portalMode === 'central-support') {
+      return {
+        portalType: 'CENTRAL_SUPPORT',
+        tenantSlug: null,
+        hostname,
+        isLocalhost: true,
+        reason: 'local-portal-mode-central-support'
       };
     }
 
@@ -193,6 +220,15 @@ export const resolvePortalFromHost = (
           reason: 'reserved-admin-subdomain'
         };
       }
+      if (subdomain === 'support') {
+        return {
+          portalType: 'CENTRAL_SUPPORT',
+          tenantSlug: null,
+          hostname,
+          isLocalhost,
+          reason: 'reserved-support-subdomain'
+        };
+      }
       return {
         portalType: 'UNKNOWN',
         tenantSlug: null,
@@ -230,7 +266,6 @@ export const resolvePortalFromHost = (
   };
 };
 
-/** Friendly wrapper around resolvePortalFromHost for docs / callers */
 export const getHostContext = (rawHost: string, config: PortalHostConfig): HostContext => {
   const resolved = resolvePortalFromHost(rawHost, config);
   if (resolved.portalType === 'APEX') {
@@ -238,6 +273,9 @@ export const getHostContext = (rawHost: string, config: PortalHostConfig): HostC
   }
   if (resolved.portalType === 'PLATFORM') {
     return { type: 'admin', hostname: resolved.hostname, reason: resolved.reason };
+  }
+  if (resolved.portalType === 'CENTRAL_SUPPORT') {
+    return { type: 'central-support', hostname: resolved.hostname, reason: resolved.reason };
   }
   if (resolved.portalType === 'TENANT') {
     return {
@@ -250,9 +288,17 @@ export const getHostContext = (rawHost: string, config: PortalHostConfig): HostC
   return { type: 'unknown', hostname: resolved.hostname, reason: resolved.reason };
 };
 
-/** Absolute URL helpers for cross-host CTAs (apex → admin, etc.) */
 export const buildPlatformOrigin = (config: Pick<PortalHostConfig, 'platformAdminHost'>): string => {
   const host = config.platformAdminHost.toLowerCase().trim();
+  return `https://${host}`;
+};
+
+export const buildCentralSupportOrigin = (
+  config: Pick<PortalHostConfig, 'centralSupportHost' | 'tenantBaseDomain'>
+): string => {
+  const host = (config.centralSupportHost || `support.${config.tenantBaseDomain}`)
+    .toLowerCase()
+    .trim();
   return `https://${host}`;
 };
 

@@ -123,9 +123,17 @@ app.get("/metrics", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+/** Public collaboration / get-started enquiries (no auth). */
+app.use("/api/public", require("./modules/collaboration/collaboration.routes"));
+/** Tenant staff → ELVA central support tickets. */
+app.use("/api/platform-support", require("./modules/platform-support/platform-support.tenant.routes"));
 /** Platform Administration APIs — no tenant context; separate JWT identity. */
 app.use("/api/platform", tenantProvisioningRoutes);
 app.use("/api/platform", platformAdminRoutes);
+app.use("/api/platform", require("./modules/platform-support/platform-support.platform.routes"));
+/** ELVA Central Support operations (support.elvasupport.in) — separate identity. */
+app.use("/api/central-support/auth", require("./modules/central-support/central-support.auth.routes"));
+app.use("/api/central-support", require("./modules/central-support/central-support.ops.routes"));
 /** Public tenant admin onboarding (invitation token based). */
 app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/workspace", workspaceRoutes);

@@ -34,6 +34,11 @@ const resolve = (rawHost, config) => {
     .split(':')[0];
   const baseDomain = config.tenantBaseDomain.toLowerCase().trim();
   const platformHost = config.platformAdminHost.toLowerCase().trim();
+  const centralSupportHost = (
+    config.centralSupportHost || `support.${baseDomain}`
+  )
+    .toLowerCase()
+    .trim();
   const isLocalhost =
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||
@@ -42,6 +47,10 @@ const resolve = (rawHost, config) => {
 
   if (hostname === platformHost || hostname === `admin.${baseDomain}`) {
     return { portalType: 'PLATFORM', tenantSlug: null };
+  }
+
+  if (hostname === centralSupportHost || hostname === `support.${baseDomain}`) {
+    return { portalType: 'CENTRAL_SUPPORT', tenantSlug: null };
   }
 
   if (baseDomain && (hostname === baseDomain || hostname === `www.${baseDomain}`)) {
@@ -54,6 +63,9 @@ const resolve = (rawHost, config) => {
     }
     if (config.portalMode === 'platform') {
       return { portalType: 'PLATFORM', tenantSlug: null };
+    }
+    if (config.portalMode === 'central-support') {
+      return { portalType: 'CENTRAL_SUPPORT', tenantSlug: null };
     }
     const slug = (config.developmentTenantSlug || 'elva').toLowerCase();
     if (RESERVED.has(slug) || !SLUG_RE.test(slug)) {
@@ -71,6 +83,9 @@ const resolve = (rawHost, config) => {
       if (subdomain === 'admin') {
         return { portalType: 'PLATFORM', tenantSlug: null };
       }
+      if (subdomain === 'support') {
+        return { portalType: 'CENTRAL_SUPPORT', tenantSlug: null };
+      }
       return { portalType: 'UNKNOWN', tenantSlug: null };
     }
     if (!SLUG_RE.test(subdomain)) {
@@ -85,6 +100,7 @@ const resolve = (rawHost, config) => {
 const base = {
   tenantBaseDomain: 'elvasupport.in',
   platformAdminHost: 'admin.elvasupport.in',
+  centralSupportHost: 'support.elvasupport.in',
   developmentTenantSlug: 'elva',
   portalMode: 'auto',
   production: false
@@ -94,12 +110,14 @@ const cases = [
   ['elvasupport.in', base, 'APEX', null],
   ['www.elvasupport.in', base, 'APEX', null],
   ['admin.elvasupport.in', base, 'PLATFORM', null],
+  ['support.elvasupport.in', base, 'CENTRAL_SUPPORT', null],
   ['elva.elvasupport.in', base, 'TENANT', 'elva'],
   ['abc.elvasupport.in', base, 'TENANT', 'abc'],
   ['api.elvasupport.in', base, 'UNKNOWN', null],
   ['localhost', base, 'TENANT', 'elva'],
   ['localhost', { ...base, portalMode: 'platform' }, 'PLATFORM', null],
   ['localhost', { ...base, portalMode: 'landing' }, 'APEX', null],
+  ['localhost', { ...base, portalMode: 'central-support' }, 'CENTRAL_SUPPORT', null],
   ['127.0.0.1', base, 'TENANT', 'elva'],
   ['evil.com', base, 'UNKNOWN', null]
 ];
@@ -118,13 +136,18 @@ for (const [host, cfg, expectType, expectSlug] of cases) {
 
 const isPlatformApi = (url) => /\/api\/platform(\/|$|\?)/.test(url);
 const isMerchantApi = (url) => /\/api\/merchant(\/|$|\?)/.test(url);
+const isCentralSupportApi = (url) => /\/api\/central-support(\/|$|\?)/.test(url);
 const apiCases = [
-  ['http://localhost:3000/api/platform/tenants', true, false],
-  ['http://localhost:3000/api/auth/login', false, false],
-  ['http://localhost:3000/api/merchant/request-otp', false, true]
+  ['http://localhost:3000/api/platform/tenants', true, false, false],
+  ['http://localhost:3000/api/auth/login', false, false, false],
+  ['http://localhost:3000/api/merchant/request-otp', false, true, false],
+  ['http://localhost:3000/api/central-support/tickets', false, false, true]
 ];
-for (const [url, plat, merch] of apiCases) {
-  const ok = isPlatformApi(url) === plat && isMerchantApi(url) === merch;
+for (const [url, plat, merch, cs] of apiCases) {
+  const ok =
+    isPlatformApi(url) === plat &&
+    isMerchantApi(url) === merch &&
+    isCentralSupportApi(url) === cs;
   if (!ok) {
     failed += 1;
     console.error('FAIL api path', url);

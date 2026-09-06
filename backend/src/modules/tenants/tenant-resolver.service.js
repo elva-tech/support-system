@@ -88,7 +88,7 @@ const resolveTenantSlugCandidate = (req) => {
   }
 
   // Option B: dedicated API host (api.* / external) — use browser Origin when it is a tenant portal
-  if (["reserved", "platform", "external", "apex"].includes(parsed.kind)) {
+  if (["reserved", "platform", "central-support", "external", "apex"].includes(parsed.kind)) {
     const originHost = extractHostnameFromOrigin(req.headers.origin);
     if (originHost) {
       const originParsed = parseTenantSlugFromHostname(originHost, env.tenant.baseDomain);
@@ -98,7 +98,7 @@ const resolveTenantSlugCandidate = (req) => {
     }
   }
 
-  if (parsed.kind === "platform" || parsed.kind === "reserved") {
+  if (parsed.kind === "platform" || parsed.kind === "central-support" || parsed.kind === "reserved") {
     throw tenantError(
       400,
       TENANT_ERROR_CODES.INVALID_TENANT_HOST,

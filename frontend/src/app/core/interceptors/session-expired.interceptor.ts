@@ -3,13 +3,20 @@ import { inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { catchError, EMPTY, throwError } from 'rxjs';
 import { AuthService } from '../services/auth.service';
+import { CentralSupportAuthService } from '../services/central-support-auth.service';
 import { PlatformAuthService } from '../services/platform-auth.service';
-import { isMerchantPortalApi, isOnboardingApi, isPlatformApi } from '../utils/api-path.util';
+import {
+  isCentralSupportApi,
+  isMerchantPortalApi,
+  isOnboardingApi,
+  isPlatformApi
+} from '../utils/api-path.util';
 import { MerchantAuthService } from '../../merchant-portal/services/merchant-auth.service';
 
 const AUTH_EXEMPT_PATHS = [
   '/api/auth/login',
   '/api/platform/auth/login',
+  '/api/central-support/auth/login',
   '/api/merchant/request-otp',
   '/api/merchant/verify-otp',
   '/api/onboarding/'
@@ -58,6 +65,28 @@ const redirectPlatformToLogin = (router: Router, platformAuth: PlatformAuthServi
     });
 };
 
+const redirectCentralSupportToLogin = (
+  router: Router,
+  csAuth: CentralSupportAuthService
+): void => {
+  if (redirectInProgress) return;
+
+  const email = csAuth.currentUser()?.email;
+  redirectInProgress = true;
+  csAuth.logout();
+
+  router
+    .navigate(['/login'], {
+      queryParams: {
+        ...(email ? { email } : {}),
+        session: 'expired'
+      }
+    })
+    .finally(() => {
+      redirectInProgress = false;
+    });
+};
+
 const redirectMerchantToLogin = (router: Router, merchantAuth: MerchantAuthService): void => {
   if (redirectInProgress) return;
 
@@ -81,6 +110,7 @@ export const sessionExpiredInterceptor: HttpInterceptorFn = (req, next) => {
   const router = inject(Router);
   const auth = inject(AuthService);
   const platformAuth = inject(PlatformAuthService);
+  const centralSupportAuth = inject(CentralSupportAuthService);
   const merchantAuth = inject(MerchantAuthService);
 
   return next(req).pipe(
@@ -91,6 +121,15 @@ export const sessionExpiredInterceptor: HttpInterceptorFn = (req, next) => {
 
       if (isExempt(req.url) || isOnboardingApi(req.url)) {
         return throwError(() => error);
+      }
+
+      if (isCentralSupportApi(req.url)) {
+        const onCsLogin = router.url.startsWith('/login');
+        if (onCsLogin || !centralSupportAuth.isAuthenticated()) {
+          return throwError(() => error);
+        }
+        redirectCentralSupportToLogin(router, centralSupportAuth);
+        return EMPTY;
       }
 
       if (isPlatformApi(req.url)) {

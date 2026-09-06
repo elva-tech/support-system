@@ -3,11 +3,12 @@ const ApiError = require("../utils/ApiError");
 const env = require("../../config/env");
 const User = require("../../modules/users/user.model");
 const { PLATFORM_IDENTITY_TYPE } = require("../constants/platform");
+const { CENTRAL_SUPPORT_IDENTITY_TYPE } = require("../constants/central-support");
 const { isUserLoginAllowed } = require("../constants/user-lifecycle");
 
 /**
  * Tenant staff JWT authentication.
- * Rejects Platform Admin tokens (identityType === PLATFORM_ADMIN).
+ * Rejects Platform Admin and Central Support tokens.
  * Legacy tenant JWTs ({ sub } only) remain valid.
  */
 const authenticate = async (req, res, next) => {
@@ -22,7 +23,10 @@ const authenticate = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, env.jwtSecret);
 
-    if (decoded.identityType === PLATFORM_IDENTITY_TYPE) {
+    if (
+      decoded.identityType === PLATFORM_IDENTITY_TYPE ||
+      decoded.identityType === CENTRAL_SUPPORT_IDENTITY_TYPE
+    ) {
       const { SECURITY_EVENTS, logSecurityEvent } = require("../observability/security-events");
       logSecurityEvent(SECURITY_EVENTS.PLATFORM_TOKEN_TENANT_API_BLOCKED, req);
       return next(new ApiError(401, "Tenant staff authentication required"));

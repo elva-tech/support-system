@@ -4,6 +4,10 @@ import {
   platformAuthGuard,
   platformGuestGuard,
   platformPortalCanMatch,
+  centralSupportAuthGuard,
+  centralSupportGuestGuard,
+  centralSupportPortalCanMatch,
+  centralSupportRoleGuard,
   apexPortalCanMatch,
   platformRoleGuard,
   tenantAuthGuard,
@@ -22,6 +26,124 @@ export const routes: Routes = [
       import('./pages/platform-landing/platform-landing.component').then(
         (m) => m.PlatformLandingComponent
       )
+  },
+  {
+    path: 'collaborate',
+    canMatch: [apexPortalCanMatch],
+    loadComponent: () =>
+      import('./pages/collaborate/collaborate.component').then((m) => m.CollaborateComponent)
+  },
+  {
+    path: 'get-started',
+    canMatch: [apexPortalCanMatch],
+    loadComponent: () =>
+      import('./pages/collaborate/collaborate.component').then((m) => m.CollaborateComponent)
+  },
+
+  // ---------- CENTRAL SUPPORT (support.elvasupport.in or localhost portalMode=central-support) ----------
+  {
+    path: 'login',
+    canMatch: [centralSupportPortalCanMatch],
+    canActivate: [centralSupportGuestGuard],
+    loadComponent: () =>
+      import('./features/central-support/pages/central-support-login.component').then(
+        (m) => m.CentralSupportLoginComponent
+      )
+  },
+  {
+    path: '',
+    canMatch: [centralSupportPortalCanMatch],
+    canActivate: [centralSupportAuthGuard],
+    loadComponent: () =>
+      import('./features/central-support/layout/central-support-shell.component').then(
+        (m) => m.CentralSupportShellComponent
+      ),
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
+      {
+        path: 'dashboard',
+        loadComponent: () =>
+          import('./features/central-support/pages/central-support-dashboard.component').then(
+            (m) => m.CentralSupportDashboardComponent
+          )
+      },
+      {
+        path: 'tickets',
+        canActivate: [centralSupportRoleGuard('CENTRAL_SUPPORT_ADMIN')],
+        loadComponent: () =>
+          import('./features/platform/pages/platform-support-queue.component').then(
+            (m) => m.PlatformSupportQueueComponent
+          )
+      },
+      {
+        path: 'my-tickets',
+        loadComponent: () =>
+          import('./features/platform/pages/platform-support-queue.component').then(
+            (m) => m.PlatformSupportQueueComponent
+          ),
+        data: { mine: true }
+      },
+      {
+        path: 'team-queue',
+        loadComponent: () =>
+          import('./features/platform/pages/platform-support-queue.component').then(
+            (m) => m.PlatformSupportQueueComponent
+          ),
+        data: { teamQueue: true }
+      },
+      {
+        path: 'workload',
+        loadComponent: () =>
+          import('./features/central-support/pages/central-support-workload.component').then(
+            (m) => m.CentralSupportWorkloadComponent
+          )
+      },
+      {
+        path: 'tickets/:id',
+        loadComponent: () =>
+          import('./features/platform/pages/platform-support-detail.component').then(
+            (m) => m.PlatformSupportDetailComponent
+          )
+      },
+      {
+        path: 'teams',
+        canActivate: [
+          centralSupportRoleGuard('CENTRAL_SUPPORT_ADMIN', 'CENTRAL_SUPPORT_TEAM_LEAD')
+        ],
+        loadComponent: () =>
+          import('./features/central-support/pages/central-support-teams.component').then(
+            (m) => m.CentralSupportTeamsComponent
+          )
+      },
+      {
+        path: 'agents',
+        canActivate: [centralSupportRoleGuard('CENTRAL_SUPPORT_ADMIN')],
+        loadComponent: () =>
+          import('./features/central-support/pages/central-support-agents.component').then(
+            (m) => m.CentralSupportAgentsComponent
+          )
+      },
+      {
+        path: 'users',
+        redirectTo: 'agents',
+        pathMatch: 'full'
+      },
+      {
+        path: 'settings',
+        canActivate: [centralSupportRoleGuard('CENTRAL_SUPPORT_ADMIN')],
+        loadComponent: () =>
+          import('./features/central-support/pages/central-support-settings.component').then(
+            (m) => m.CentralSupportSettingsComponent
+          )
+      },
+      {
+        path: 'profile',
+        loadComponent: () =>
+          import('./features/central-support/pages/central-support-profile.component').then(
+            (m) => m.CentralSupportProfileComponent
+          )
+      }
+    ]
   },
 
   // ---------- PLATFORM PORTAL (admin.elvasupport.in or localhost portalMode=platform) ----------
@@ -98,6 +220,27 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/platform/pages/platform-integrity.component').then(
             (m) => m.PlatformIntegrityComponent
+          )
+      },
+      {
+        path: 'support',
+        loadComponent: () =>
+          import('./features/platform/pages/platform-support-moved.component').then(
+            (m) => m.PlatformSupportMovedComponent
+          )
+      },
+      {
+        path: 'support/mine',
+        loadComponent: () =>
+          import('./features/platform/pages/platform-support-moved.component').then(
+            (m) => m.PlatformSupportMovedComponent
+          )
+      },
+      {
+        path: 'support/:id',
+        loadComponent: () =>
+          import('./features/platform/pages/platform-support-moved.component').then(
+            (m) => m.PlatformSupportMovedComponent
           )
       },
       {
@@ -197,6 +340,13 @@ export const routes: Routes = [
     loadComponent: () => import('./layout/shell/shell.component').then((m) => m.ShellComponent),
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
+      {
+        path: 'support',
+        loadComponent: () =>
+          import('./features/support/tenant-platform-support.component').then(
+            (m) => m.TenantPlatformSupportComponent
+          )
+      },
       {
         path: 'dashboard',
         loadComponent: () =>

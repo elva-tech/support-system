@@ -30,6 +30,15 @@ interface NavItem {
         [showActionsOnMobile]="true"
         [compactActions]="true"
       >
+        <a
+          routerLink="/support"
+          class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/20 text-sm font-semibold transition hover:bg-white/10 sm:h-9 sm:w-9"
+          [style.color]="'var(--tenant-primary-contrast, #ffffff)'"
+          title="Click here for Support"
+          aria-label="Click here for Support"
+        >
+          ?
+        </a>
         <button
           type="button"
           class="shrink-0 rounded-lg border border-white/20 px-3 py-1.5 text-xs transition hover:bg-white/10 sm:text-sm"

@@ -8,7 +8,8 @@ export const environment = {
   apiUrl: 'https://support-system-qhjr.onrender.com/api',
   tenantBaseDomain: 'elvasupport.in',
   platformAdminHost: 'admin.elvasupport.in',
+  centralSupportHost: 'support.elvasupport.in',
   developmentTenantSlug: '',
-  portalMode: 'auto' as 'auto' | 'platform' | 'tenant' | 'landing',
+  portalMode: 'auto' as 'auto' | 'platform' | 'central-support' | 'tenant' | 'landing',
   sendTenantSlugHeader: false
 };

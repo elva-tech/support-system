@@ -51,7 +51,11 @@ export class BrandingService {
   });
 
   readonly isPortalReady = computed(() => {
-    if (this.portal.isApexPortal || this.portal.isPlatformPortal) {
+    if (
+      this.portal.isApexPortal ||
+      this.portal.isPlatformPortal ||
+      this.portal.isCentralSupportPortal
+    ) {
       return true;
     }
     if (this.portal.isUnknownPortal) {
@@ -63,7 +67,11 @@ export class BrandingService {
 
   /** Start hostname-aware bootstrap once at app root. */
   bootstrapPortal(): void {
-    if (this.portal.isApexPortal || this.portal.isPlatformPortal) {
+    if (
+      this.portal.isApexPortal ||
+      this.portal.isPlatformPortal ||
+      this.portal.isCentralSupportPortal
+    ) {
       this.workspaceUnavailable.set(false);
       this.bootstrapError.set(null);
       this.bootstrapState.set('ready');
@@ -89,7 +97,11 @@ export class BrandingService {
 
   /** Call when entering a tenant portal (shell / login). Non-blocking after bootstrap. */
   loadTenantBranding(options: { force?: boolean } = {}): void {
-    if (this.portal.isPlatformPortal || this.portal.isApexPortal) {
+    if (
+      this.portal.isPlatformPortal ||
+      this.portal.isApexPortal ||
+      this.portal.isCentralSupportPortal
+    ) {
       this.workspaceUnavailable.set(false);
       this.bootstrapState.set('ready');
       this.applyPlatformDefaults();
@@ -287,6 +299,23 @@ export class BrandingService {
   }
 
   private defaultBranding(): WorkspaceBranding {
+    if (this.portal.isCentralSupportPortal) {
+      return {
+        productName: 'ELVA Central Support',
+        displayName: 'ELVA Support Operations',
+        organizationName: 'ELVA Central Support',
+        primaryColor: ELVA_DEFAULT_BRANDING.primaryColor,
+        secondaryColor: ELVA_DEFAULT_BRANDING.secondaryColor,
+        logoUrl: ELVA_DEFAULT_BRANDING.logoPath,
+        supportDisplayName: 'ELVA Central Support',
+        loginTitle: 'Central Support Sign In',
+        loginSubtitle: 'Sign in to ELVA Central Support operations',
+        customerLabel: DEFAULT_CUSTOMER_LABEL,
+        logoAvailable: true,
+        faviconUrl: ELVA_FAVICON_PATH
+      };
+    }
+
     if (this.portal.isPlatformPortal || this.portal.isApexPortal) {
       return {
         productName: this.portal.isPlatformPortal

@@ -1,12 +1,19 @@
 import { HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { AuthService } from '../services/auth.service';
+import { CentralSupportAuthService } from '../services/central-support-auth.service';
 import { PlatformAuthService } from '../services/platform-auth.service';
 import { PortalContextService } from '../portal/portal-context.service';
-import { isMerchantPortalApi, isOnboardingApi, isPlatformApi } from '../utils/api-path.util';
+import {
+  isCentralSupportApi,
+  isMerchantPortalApi,
+  isOnboardingApi,
+  isPlatformApi
+} from '../utils/api-path.util';
 
 /**
  * Attaches the correct auth / tenant context headers.
+ * - Central Support APIs → central_support_access_token only
  * - Platform APIs → platform_access_token only (no X-Tenant-Slug)
  * - Merchant APIs → handled by merchant interceptor
  * - Onboarding APIs → no bearer token
@@ -14,6 +21,17 @@ import { isMerchantPortalApi, isOnboardingApi, isPlatformApi } from '../utils/ap
  */
 export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
   if (isMerchantPortalApi(req.url) || isOnboardingApi(req.url)) {
+    return next(req);
+  }
+
+  if (isCentralSupportApi(req.url)) {
+    const csAuth = inject(CentralSupportAuthService);
+    const csToken = csAuth.token();
+    if (csToken) {
+      req = req.clone({
+        setHeaders: { Authorization: `Bearer ${csToken}` }
+      });
+    }
     return next(req);
   }
 

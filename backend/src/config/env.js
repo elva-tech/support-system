@@ -177,6 +177,15 @@ module.exports = {
     password: process.env.PLATFORM_ADMIN_PASSWORD || "",
     name: process.env.PLATFORM_ADMIN_NAME || "Platform Super Admin"
   },
+  /**
+   * Central Support Admin bootstrap (support.elvasupport.in).
+   * Used ONLY by `npm run ensure:central-support-admin`.
+   */
+  centralSupportAdmin: {
+    email: process.env.CENTRAL_SUPPORT_ADMIN_EMAIL || "",
+    password: process.env.CENTRAL_SUPPORT_ADMIN_PASSWORD || "",
+    name: process.env.CENTRAL_SUPPORT_ADMIN_NAME || "Central Support Admin"
+  },
   notifications: {
     provider: process.env.NOTIFICATION_PROVIDER || "SMTP",
     fallbackEnabled: process.env.NOTIFICATION_FALLBACK_ENABLED !== "false",
