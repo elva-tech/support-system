@@ -1,4 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { finalize } from 'rxjs/operators';
 import { PortalContextService } from './portal-context.service';
 import { WorkspaceApiService } from '../services/workspace-api.service';
 import {
@@ -15,6 +16,11 @@ import {
   PortalBootstrapState,
   WorkspaceBranding
 } from './branding.types';
+import {
+  classifyTenantBootstrapFailure,
+  extractBootstrapErrorInfo
+} from './tenant-bootstrap.util';
+import { PublicWorkspaceBranding } from '../services/workspace-api.service';
 
 export type { PortalBootstrapState, WorkspaceBranding } from './branding.types';
 export { NEUTRAL_WORKSPACE_ICON, ELVA_FAVICON_PATH } from './branding.types';
@@ -29,7 +35,8 @@ const THEME_CSS_VARS = [
 
 /**
  * Single source of truth for tenant presentation + portal bootstrap readiness.
- * Platform/apex use ELVA defaults immediately; tenant hosts never flash ELVA branding.
+ * Platform/apex/central-support use ELVA defaults immediately.
+ * Tenant hosts: loading → ready | not-found | error (never stuck on loading).
  */
 @Injectable({ providedIn: 'root' })
 export class BrandingService {
@@ -37,7 +44,8 @@ export class BrandingService {
   private readonly workspaceApi = inject(WorkspaceApiService);
   private readonly overrideSignal = signal<Partial<WorkspaceBranding> | null>(null);
   private logoObjectUrl: string | null = null;
-  private loadedForSlug: string | null = null;
+  /** Slug that successfully reached bootstrapState === 'ready' */
+  private readyForSlug: string | null = null;
   private loadInFlight = false;
 
   readonly workspaceUnavailable = signal(false);
@@ -50,6 +58,10 @@ export class BrandingService {
     return { ...defaults, ...override };
   });
 
+  /**
+   * Portal shell may render only when bootstrap finished successfully.
+   * not-found / error keep the root overlay (do not activate tenant routes).
+   */
   readonly isPortalReady = computed(() => {
     if (
       this.portal.isApexPortal ||
@@ -61,8 +73,15 @@ export class BrandingService {
     if (this.portal.isUnknownPortal) {
       return true;
     }
-    const state = this.bootstrapState();
-    return state === 'ready' || state === 'not-found' || state === 'error';
+    return this.bootstrapState() === 'ready';
+  });
+
+  /** True while the root should show bootstrap UI (spinner / not-found / error). */
+  readonly showTenantBootstrapOverlay = computed(() => {
+    if (!this.portal.isTenantPortal) {
+      return false;
+    }
+    return this.bootstrapState() !== 'ready';
   });
 
   /** Start hostname-aware bootstrap once at app root. */
@@ -95,7 +114,7 @@ export class BrandingService {
     this.loadTenantBranding({ force: false });
   }
 
-  /** Call when entering a tenant portal (shell / login). Non-blocking after bootstrap. */
+  /** Call when entering a tenant portal (shell / login). No-op if already ready for slug. */
   loadTenantBranding(options: { force?: boolean } = {}): void {
     if (
       this.portal.isPlatformPortal ||
@@ -115,93 +134,135 @@ export class BrandingService {
     }
 
     const slug = this.portal.tenantSlug;
-    if (!options.force && (this.loadedForSlug === slug || this.loadInFlight)) {
+    const state = this.bootstrapState();
+
+    // Terminal failure: do not restart unless explicitly forced (Retry button)
+    if (
+      !options.force &&
+      (state === 'not-found' || state === 'error') &&
+      this.portal.tenantSlug === slug
+    ) {
       return;
     }
 
-    this.loadedForSlug = slug;
+    if (!options.force && this.readyForSlug === slug && state === 'ready') {
+      return;
+    }
+
+    if (!options.force && this.loadInFlight) {
+      return;
+    }
+
     this.loadInFlight = true;
     this.workspaceUnavailable.set(false);
     this.bootstrapError.set(null);
     this.bootstrapState.set('loading');
-    // Neutral defaults only — never ELVA logo/colors on tenant hosts while loading
     this.overrideSignal.set(null);
     this.resetCssVariables();
 
-    this.workspaceApi.getPublicBranding().subscribe({
-      next: (res) => {
-        this.loadInFlight = false;
-        this.workspaceUnavailable.set(false);
-        const data = res.data;
-        const primary = normalizeHexColor(data.primaryColor);
-        const secondary = normalizeHexColor(data.secondaryColor);
-        const hasLogo = Boolean(data.logoAvailable ?? data.hasLogo);
-
-        this.applyTenantBranding({
-          productName: data.supportDisplayName || data.organizationName || 'Support Workspace',
-          displayName: data.organizationName || data.displayName || data.tenantName,
-          organizationName: data.organizationName || data.displayName || data.tenantName,
-          supportDisplayName: data.supportDisplayName || data.organizationName || 'Support',
-          primaryColor: primary,
-          secondaryColor: secondary,
-          loginTitle: data.loginTitle || '',
-          loginSubtitle: data.loginSubtitle || '',
-          customerLabel: normalizeCustomerLabel(data.customerLabel),
-          logoAvailable: hasLogo,
-          logoUrl: hasLogo ? null : NEUTRAL_WORKSPACE_ICON,
-          faviconUrl: hasLogo ? null : NEUTRAL_WORKSPACE_ICON
-        });
-
-        this.applyCssVariables(primary, secondary);
-
-        if (hasLogo) {
-          this.workspaceApi.fetchLogoBlob().subscribe({
-            next: (blob) => {
-              if (this.logoObjectUrl) {
-                URL.revokeObjectURL(this.logoObjectUrl);
-              }
-              this.logoObjectUrl = URL.createObjectURL(blob);
-              this.applyTenantBranding({
-                ...this.overrideSignal(),
-                logoUrl: this.logoObjectUrl,
-                faviconUrl: this.logoObjectUrl,
-                logoAvailable: true
-              });
-              this.bootstrapState.set('ready');
-            },
-            error: () => {
-              this.applyTenantBranding({
-                ...this.overrideSignal(),
-                logoUrl: NEUTRAL_WORKSPACE_ICON,
-                faviconUrl: NEUTRAL_WORKSPACE_ICON,
-                logoAvailable: false
-              });
-              this.bootstrapState.set('ready');
-            }
-          });
-        } else {
-          this.bootstrapState.set('ready');
+    this.workspaceApi
+      .getPublicBranding()
+      .pipe(
+        finalize(() => {
+          this.loadInFlight = false;
+        })
+      )
+      .subscribe({
+        next: (res) => {
+          try {
+            this.applyPublicBrandingSuccess(res?.data ?? null);
+          } catch (err) {
+            this.applyBootstrapFailure(err);
+          }
+        },
+        error: (err) => {
+          this.applyBootstrapFailure(err);
         }
-      },
-      error: (err) => {
-        this.loadInFlight = false;
-        this.loadedForSlug = null;
-        const status = err?.status;
-        const code = err?.error?.errors?.code || err?.error?.code;
-        if (status === 404 || code === 'TENANT_NOT_FOUND') {
-          this.workspaceUnavailable.set(true);
-          this.overrideSignal.set(null);
-          this.resetCssVariables();
-          this.bootstrapState.set('not-found');
-          this.bootstrapError.set('This workspace may no longer exist or the address may be incorrect.');
-          return;
-        }
-        this.workspaceUnavailable.set(false);
-        this.bootstrapState.set('error');
-        this.bootstrapError.set(err?.error?.message || 'Failed to load workspace branding');
-        this.resetCssVariables();
-      }
+      });
+  }
+
+  private applyPublicBrandingSuccess(data: PublicWorkspaceBranding | null | undefined): void {
+    if (!data || typeof data !== 'object') {
+      this.applyBootstrapFailure({
+        status: 404,
+        error: { code: 'TENANT_NOT_FOUND', message: 'Workspace branding unavailable' }
+      });
+      return;
+    }
+
+    const primary = normalizeHexColor(data.primaryColor);
+    const secondary = normalizeHexColor(data.secondaryColor);
+    const hasLogo = Boolean(data.logoAvailable ?? data.hasLogo);
+    const organizationName = String(
+      data.organizationName || data.displayName || data.tenantName || 'Support Workspace'
+    );
+    const supportDisplayName = String(
+      data.supportDisplayName || data.organizationName || 'Support'
+    );
+
+    this.workspaceUnavailable.set(false);
+    this.applyTenantBranding({
+      productName: supportDisplayName,
+      displayName: organizationName,
+      organizationName,
+      supportDisplayName,
+      primaryColor: primary,
+      secondaryColor: secondary,
+      loginTitle: String(data.loginTitle || ''),
+      loginSubtitle: String(data.loginSubtitle || ''),
+      customerLabel: normalizeCustomerLabel(data.customerLabel),
+      logoAvailable: hasLogo,
+      logoUrl: hasLogo ? null : NEUTRAL_WORKSPACE_ICON,
+      faviconUrl: hasLogo ? null : NEUTRAL_WORKSPACE_ICON
     });
+    this.applyCssVariables(primary, secondary);
+
+    if (hasLogo) {
+      this.workspaceApi.fetchLogoBlob().subscribe({
+        next: (blob) => {
+          if (this.logoObjectUrl) {
+            URL.revokeObjectURL(this.logoObjectUrl);
+          }
+          this.logoObjectUrl = URL.createObjectURL(blob);
+          this.applyTenantBranding({
+            ...this.overrideSignal(),
+            logoUrl: this.logoObjectUrl,
+            faviconUrl: this.logoObjectUrl,
+            logoAvailable: true
+          });
+          this.markBootstrapReady();
+        },
+        error: () => {
+          this.applyTenantBranding({
+            ...this.overrideSignal(),
+            logoUrl: NEUTRAL_WORKSPACE_ICON,
+            faviconUrl: NEUTRAL_WORKSPACE_ICON,
+            logoAvailable: false
+          });
+          this.markBootstrapReady();
+        }
+      });
+      return;
+    }
+
+    this.markBootstrapReady();
+  }
+
+  private markBootstrapReady(): void {
+    this.readyForSlug = this.portal.tenantSlug;
+    this.workspaceUnavailable.set(false);
+    this.bootstrapError.set(null);
+    this.bootstrapState.set('ready');
+  }
+
+  private applyBootstrapFailure(err: unknown): void {
+    const classified = classifyTenantBootstrapFailure(extractBootstrapErrorInfo(err));
+    this.readyForSlug = null;
+    this.overrideSignal.set(null);
+    this.resetCssVariables();
+    this.bootstrapError.set(classified.message);
+    this.bootstrapState.set(classified.state);
+    this.workspaceUnavailable.set(classified.state === 'not-found');
   }
 
   applyInvitationBranding(
@@ -243,7 +304,7 @@ export class BrandingService {
   }
 
   refreshTenantBranding(): void {
-    this.loadedForSlug = null;
+    this.readyForSlug = null;
     this.loadTenantBranding({ force: true });
   }
 
@@ -257,7 +318,7 @@ export class BrandingService {
       this.logoObjectUrl = null;
     }
     this.overrideSignal.set(null);
-    this.loadedForSlug = null;
+    this.readyForSlug = null;
     this.applyPlatformDefaults();
   }
 

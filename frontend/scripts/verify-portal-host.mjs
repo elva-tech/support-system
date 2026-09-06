@@ -156,6 +156,58 @@ for (const [url, plat, merch, cs] of apiCases) {
   }
 }
 
+/** Mirrors tenant-bootstrap.util.ts */
+const classifyBootstrapFailure = (info) => {
+  const status = Number(info.status) || 0;
+  const code = String(info.code || '').trim();
+  const notFound = new Set([
+    'TENANT_NOT_FOUND',
+    'INVALID_TENANT_HOST',
+    'INVALID_TENANT_SLUG',
+    'RESERVED_TENANT_SLUG',
+    'TENANT_CONTEXT_REQUIRED'
+  ]);
+  if (status === 404 || notFound.has(code)) return 'not-found';
+  return 'error';
+};
+
+const bootstrapCases = [
+  [{ status: 404 }, 'not-found'],
+  [{ status: 400, code: 'TENANT_NOT_FOUND' }, 'not-found'],
+  [{ status: 400, code: 'INVALID_TENANT_HOST' }, 'not-found'],
+  [{ status: 400, code: 'TENANT_CONTEXT_REQUIRED' }, 'not-found'],
+  [{ status: 500 }, 'error'],
+  [{ status: 0 }, 'error']
+];
+for (const [info, expect] of bootstrapCases) {
+  const got = classifyBootstrapFailure(info);
+  if (got !== expect) {
+    failed += 1;
+    console.error('FAIL bootstrap', info, 'expected', expect, 'got', got);
+  } else {
+    console.log('OK   bootstrap', JSON.stringify(info), '→', got);
+  }
+}
+
+{
+  const got = resolve('test.elvasupport.in', base);
+  if (got.portalType !== 'UNKNOWN' || got.tenantSlug !== null) {
+    failed += 1;
+    console.error('FAIL test.elvasupport.in must be UNKNOWN reserved, got', got);
+  } else {
+    console.log('OK   test.elvasupport.in → UNKNOWN (reserved)');
+  }
+}
+{
+  const got = resolve('qwerty.elvasupport.in', base);
+  if (got.portalType !== 'TENANT' || got.tenantSlug !== 'qwerty') {
+    failed += 1;
+    console.error('FAIL qwerty.elvasupport.in must be TENANT, got', got);
+  } else {
+    console.log('OK   qwerty.elvasupport.in → TENANT qwerty');
+  }
+}
+
 if (failed) {
   console.error(`\n${failed} verification check(s) failed`);
   process.exit(1);
